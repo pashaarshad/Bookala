@@ -1,0 +1,26 @@
+Quick steps to install APK on your Android phone
+
+1) Build the APK
+   - Run the script: BUILD_APK.bat (from this folder) or:
+     C:\src\flutter\bin\flutter.bat build apk --release
+
+2) Locate the APK
+   - The debug/release APK is at:\n     build\\app\\outputs\\flutter-apk\\app-release.apk
+
+3) Install to phone (Option A - copy & open):
+   - Copy the APK to your phone (USB / cloud)
+   - On the phone, navigate to the APK using a file manager and tap to install
+   - You may need to allow "Install unknown apps" for the installer app (Settings)
+
+4) Install to phone (Option B - ADB):
+   - Enable Developer Options and USB Debugging on the phone
+   - Connect phone via USB
+   - From your PC run:
+     adb devices
+     adb install -r build\\app\\outputs\\flutter-apk\\app-release.apk
+
+5) Run the app on the phone and grant SMS permissions when prompted.
+
+Notes:
+- For actual SMS sending use a real Android device (emulator can't send SMS to real numbers).
+- If installation fails, check Android SDK / platform-tools (adb) are installed and on PATH.
