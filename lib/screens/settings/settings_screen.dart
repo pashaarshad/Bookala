@@ -228,7 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             await locationProvider.stopTracking();
                           }
                         },
-                        activeColor: AppTheme.primaryColor,
+                        activeThumbColor: AppTheme.primaryColor,
                       ),
                     );
                   },
@@ -264,7 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: Switch(
                     value: true,
                     onChanged: (value) {},
-                    activeColor: AppTheme.primaryColor,
+                    activeThumbColor: AppTheme.primaryColor,
                   ),
                 ),
                 const SizedBox(height: 24),

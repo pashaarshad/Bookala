@@ -15,6 +15,7 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   UserProfile? _userProfile;
   String? _errorMessage;
+  bool _isDemo = false;
 
   // Getters
   AuthStatus get status => _status;
@@ -23,6 +24,7 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get isLoading => _status == AuthStatus.loading;
+  bool get isDemo => _isDemo;
 
   AuthProvider() {
     _init();
@@ -31,11 +33,14 @@ class AuthProvider extends ChangeNotifier {
   // Initialize and check auth state
   void _init() {
     _auth.authStateChanges().listen((User? user) async {
+      if (_isDemo) return; // Don't override demo state
+
       if (user != null) {
         _user = user;
         await _loadUserProfile();
         _status = AuthStatus.authenticated;
-      } else {
+      } else if (!_isDemo) {
+        // Only set unauthenticated if not in demo mode
         _user = null;
         _userProfile = null;
         _status = AuthStatus.unauthenticated;
@@ -44,8 +49,42 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  // Load user profile from Firestore
+  // Mock Login for Demo
+  Future<bool> signInAsDemo() async {
+    try {
+      _status = AuthStatus.loading;
+      _errorMessage = null;
+      notifyListeners();
+
+      // Simulate network delay
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      _isDemo = true;
+      _userProfile = UserProfile(
+        id: 'demo_user_123',
+        name: 'Demo User',
+        email: 'demo@bookala.com',
+        photoUrl: null,
+        createdAt: DateTime.now(),
+        lastLogin: DateTime.now(),
+        businessName: 'My Demo Shop',
+      );
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = 'Demo login failed';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Load user profile from Firestore or Mock
   Future<void> _loadUserProfile() async {
+    if (_isDemo) return;
+
     try {
       _userProfile = await _firebaseService.getUserProfile();
 
@@ -60,7 +99,7 @@ class AuthProvider extends ChangeNotifier {
           lastLogin: DateTime.now(),
         );
         await _firebaseService.saveUserProfile(_userProfile!);
-      } else {
+      } else if (_userProfile != null) {
         // Update last login
         await _firebaseService.updateLastLogin();
       }
@@ -97,6 +136,7 @@ class AuthProvider extends ChangeNotifier {
 
       // Sign in to Firebase with the credential
       await _auth.signInWithCredential(credential);
+      _isDemo = false;
 
       return true;
     } on FirebaseAuthException catch (e) {
@@ -118,9 +158,12 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.loading;
       notifyListeners();
 
-      await _googleSignIn.signOut();
-      await _auth.signOut();
+      if (!_isDemo) {
+        await _googleSignIn.signOut();
+        await _auth.signOut();
+      }
 
+      _isDemo = false;
       _user = null;
       _userProfile = null;
       _status = AuthStatus.unauthenticated;
@@ -139,15 +182,18 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     if (_userProfile == null) return;
 
-    try {
-      _userProfile = _userProfile!.copyWith(
-        name: name ?? _userProfile!.name,
-        businessName: businessName ?? _userProfile!.businessName,
-        phone: phone ?? _userProfile!.phone,
-      );
+    // Update local state
+    _userProfile = _userProfile!.copyWith(
+      name: name ?? _userProfile!.name,
+      businessName: businessName ?? _userProfile!.businessName,
+      phone: phone ?? _userProfile!.phone,
+    );
+    notifyListeners();
 
+    if (_isDemo) return; // Don't save to firebase in demo mode
+
+    try {
       await _firebaseService.saveUserProfile(_userProfile!);
-      notifyListeners();
     } catch (e) {
       print('Error updating profile: $e');
     }

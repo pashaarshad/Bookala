@@ -23,7 +23,12 @@ void main() async {
   );
 
   // Initialize Firebase
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+    // Continue running app even if Firebase fails, as we'll use mock services
+  }
 
   runApp(const BookalaApp());
 }

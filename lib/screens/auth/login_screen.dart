@@ -86,6 +86,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     .animate()
                     .fadeIn(delay: 800.ms, duration: 600.ms)
                     .slideY(begin: 0.5, end: 0),
+                const SizedBox(height: 16),
+                _buildDemoButton()
+                    .animate()
+                    .fadeIn(delay: 900.ms, duration: 600.ms)
+                    .slideY(begin: 0.5, end: 0),
                 const SizedBox(height: 24),
                 Text(
                   'By signing in, you agree to our Terms of Service',
@@ -169,6 +174,36 @@ class _LoginScreenState extends State<LoginScreen> {
         icon: Icons.g_mobiledata_rounded,
         isLoading: _isLoading,
         onPressed: _signInWithGoogle,
+      ),
+    );
+  }
+
+  Future<void> _signInAsDemo() async {
+    setState(() => _isLoading = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.signInAsDemo();
+
+    if (success && mounted) {
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildDemoButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isLoading ? null : _signInAsDemo,
+        icon: const Icon(Icons.login),
+        label: const Text('Try Demo Mode (No Login)'),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          side: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.5)),
+        ),
       ),
     );
   }

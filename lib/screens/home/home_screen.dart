@@ -239,8 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     else
                       ...transactionProvider.recentTransactions
                           .take(5)
-                          .map((t) => TransactionTile(transaction: t))
-                          .toList(),
+                          .map((t) => TransactionTile(transaction: t)),
                   ]),
                 ),
               ),

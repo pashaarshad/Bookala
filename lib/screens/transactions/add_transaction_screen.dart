@@ -315,7 +315,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           value: _sendSms,
                           onChanged: (value) =>
                               setState(() => _sendSms = value),
-                          activeColor: AppTheme.primaryColor,
+                          activeThumbColor: AppTheme.primaryColor,
                         ),
                       ],
                     ),

@@ -28,7 +28,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   double? _latitude;
   double? _longitude;
   bool _isLoading = false;
-  bool _useCurrentLocation = true;
+  final bool _useCurrentLocation = true;
 
   @override
   void initState() {
