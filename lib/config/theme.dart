@@ -112,7 +112,7 @@ class AppTheme {
       bodyMedium: GoogleFonts.inter(fontSize: 14, color: textSecondary),
       bodySmall: GoogleFonts.inter(fontSize: 12, color: textMuted),
     ),
-    appBarTheme: AppBarTheme(
+    appBarTheme: AppBarThemeData(
       backgroundColor: backgroundColor,
       elevation: 0,
       centerTitle: true,
@@ -123,14 +123,14 @@ class AppTheme {
       ),
       iconTheme: const IconThemeData(color: textPrimary),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: cardColor,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadiusLarge),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
+    inputDecorationTheme: InputDecorationThemeData(
       filled: true,
       fillColor: surfaceColor,
       border: OutlineInputBorder(
@@ -185,7 +185,7 @@ class AppTheme {
       ),
       behavior: SnackBarBehavior.floating,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(borderRadiusLarge),
