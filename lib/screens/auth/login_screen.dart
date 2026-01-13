@@ -16,17 +16,48 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
+  String _statusMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatically trigger demo login for the user
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            setState(() => _statusMessage = 'Auto-filling credentials...');
+            Future.delayed(const Duration(seconds: 1), () {
+              if (mounted) {
+                setState(() => _statusMessage = 'Logging in as test123...');
+                _signInAsDemo();
+              }
+            });
+          }
+        });
+      }
+    });
+  }
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
-
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final success = await authProvider.signInWithGoogle();
-
     if (success && mounted) {
       Navigator.pushReplacementNamed(context, AppRoutes.home);
     }
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
 
+  Future<void> _signInAsDemo() async {
+    setState(() => _isLoading = true);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.signInAsDemo();
+    if (success && mounted) {
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    }
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -44,64 +75,74 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                // Logo and Title
-                _buildLogo()
-                    .animate()
-                    .fadeIn(duration: 600.ms)
-                    .scale(begin: const Offset(0.8, 0.8)),
-                const SizedBox(height: 24),
-                Text(
-                      'Bookala',
-                      style: GoogleFonts.poppins(
-                        fontSize: 42,
-                        fontWeight: FontWeight.bold,
-                        foreground: Paint()
-                          ..shader = AppTheme.primaryGradient.createShader(
-                            const Rect.fromLTWH(0, 0, 200, 70),
-                          ),
-                      ),
-                    )
-                    .animate()
-                    .fadeIn(delay: 200.ms, duration: 600.ms)
-                    .slideY(begin: 0.3, end: 0),
-                const SizedBox(height: 8),
-                Text(
-                  'Smart Account Management',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    color: AppTheme.textSecondary,
-                  ),
-                ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
-                const SizedBox(height: 48),
-                // Features
-                ..._buildFeatures(),
-                const Spacer(flex: 2),
-                // Sign In Button
-                _buildSignInButton()
-                    .animate()
-                    .fadeIn(delay: 800.ms, duration: 600.ms)
-                    .slideY(begin: 0.5, end: 0),
-                const SizedBox(height: 16),
-                _buildDemoButton()
-                    .animate()
-                    .fadeIn(delay: 900.ms, duration: 600.ms)
-                    .slideY(begin: 0.5, end: 0),
-                const SizedBox(height: 24),
-                Text(
-                  'By signing in, you agree to our Terms of Service',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: AppTheme.textMuted,
-                  ),
-                  textAlign: TextAlign.center,
-                ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
-                const Spacer(),
-              ],
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+              child: Column(
+                children: [
+                  _buildLogo()
+                      .animate()
+                      .fadeIn(duration: 600.ms)
+                      .scale(begin: const Offset(0.8, 0.8)),
+                  const SizedBox(height: 24),
+                  Text(
+                        'Bookala',
+                        style: GoogleFonts.poppins(
+                          fontSize: 42,
+                          fontWeight: FontWeight.bold,
+                          foreground: Paint()
+                            ..shader = AppTheme.primaryGradient.createShader(
+                              const Rect.fromLTWH(0, 0, 200, 70),
+                            ),
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(delay: 200.ms, duration: 600.ms)
+                      .slideY(begin: 0.3, end: 0),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Smart Account Management',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
+                  const SizedBox(height: 48),
+                  ..._buildFeatures(),
+                  const SizedBox(height: 48),
+
+                  if (_statusMessage.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        _statusMessage,
+                        style: GoogleFonts.inter(
+                          color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ).animate().fadeIn().shimmer(),
+                    ),
+
+                  _buildSignInButton()
+                      .animate()
+                      .fadeIn(delay: 800.ms, duration: 600.ms)
+                      .slideY(begin: 0.5, end: 0),
+                  const SizedBox(height: 16),
+                  _buildDemoButton()
+                      .animate()
+                      .fadeIn(delay: 900.ms, duration: 600.ms)
+                      .slideY(begin: 0.5, end: 0),
+                  const SizedBox(height: 24),
+                  Text(
+                    'By signing in, you agree to our Terms of Service',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppTheme.textMuted,
+                    ),
+                    textAlign: TextAlign.center,
+                  ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
+                ],
+              ),
             ),
           ),
         ),
@@ -176,21 +217,6 @@ class _LoginScreenState extends State<LoginScreen> {
         onPressed: _signInWithGoogle,
       ),
     );
-  }
-
-  Future<void> _signInAsDemo() async {
-    setState(() => _isLoading = true);
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.signInAsDemo();
-
-    if (success && mounted) {
-      Navigator.pushReplacementNamed(context, AppRoutes.home);
-    }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
   }
 
   Widget _buildDemoButton() {

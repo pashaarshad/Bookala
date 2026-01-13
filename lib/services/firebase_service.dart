@@ -65,7 +65,6 @@ class FirebaseService {
         email: 'demo@bookala.com',
         name: 'Demo Admin',
         createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
         businessName: 'Demo Business',
       );
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_profile.dart';
 import '../services/firebase_service.dart';
@@ -7,9 +8,9 @@ import '../services/firebase_service.dart';
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
 
 class AuthProvider extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-  final FirebaseService _firebaseService = FirebaseService();
+  FirebaseAuth? _auth;
+  GoogleSignIn? _googleSignIn;
+  late final FirebaseService _firebaseService;
 
   AuthStatus _status = AuthStatus.initial;
   User? _user;
@@ -27,26 +28,44 @@ class AuthProvider extends ChangeNotifier {
   bool get isDemo => _isDemo;
 
   AuthProvider() {
+    _firebaseService = FirebaseService();
+    try {
+      // Safely initialize Firebase instances if available
+      // Import 'package:firebase_core/firebase_core.dart' to check apps
+      // Wait, I should import it at the top.
+      if (Firebase.apps.isNotEmpty) {
+        _auth = FirebaseAuth.instance;
+        _googleSignIn = GoogleSignIn();
+      }
+    } catch (e) {
+      debugPrint('AuthProvider: Firebase not available: $e');
+    }
     _init();
   }
 
   // Initialize and check auth state
   void _init() {
-    _auth.authStateChanges().listen((User? user) async {
-      if (_isDemo) return; // Don't override demo state
+    if (_auth != null) {
+      _auth!.authStateChanges().listen((User? user) async {
+        if (_isDemo) return; // Don't override demo state
 
-      if (user != null) {
-        _user = user;
-        await _loadUserProfile();
-        _status = AuthStatus.authenticated;
-      } else if (!_isDemo) {
-        // Only set unauthenticated if not in demo mode
-        _user = null;
-        _userProfile = null;
-        _status = AuthStatus.unauthenticated;
-      }
+        if (user != null) {
+          _user = user;
+          await _loadUserProfile();
+          _status = AuthStatus.authenticated;
+        } else if (!_isDemo) {
+          // Only set unauthenticated if not in demo mode
+          _user = null;
+          _userProfile = null;
+          _status = AuthStatus.unauthenticated;
+        }
+        notifyListeners();
+      });
+    } else {
+      // No Firebase, default to unauthenticated
+      _status = AuthStatus.unauthenticated;
       notifyListeners();
-    });
+    }
   }
 
   // Mock Login for Demo
@@ -60,6 +79,8 @@ class AuthProvider extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 1500));
 
       _isDemo = true;
+      _firebaseService.setMockMode(true);
+
       _userProfile = UserProfile(
         id: 'demo_user_123',
         name: 'Demo User',
@@ -110,13 +131,20 @@ class AuthProvider extends ChangeNotifier {
 
   // Sign in with Google
   Future<bool> signInWithGoogle() async {
+    if (_auth == null || _googleSignIn == null) {
+      _status = AuthStatus.error;
+      _errorMessage = 'Firebase is not configured for this device.';
+      notifyListeners();
+      return false;
+    }
+
     try {
       _status = AuthStatus.loading;
       _errorMessage = null;
       notifyListeners();
 
       // Trigger the authentication flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await _googleSignIn!.signIn();
 
       if (googleUser == null) {
         _status = AuthStatus.unauthenticated;
@@ -135,8 +163,9 @@ class AuthProvider extends ChangeNotifier {
       );
 
       // Sign in to Firebase with the credential
-      await _auth.signInWithCredential(credential);
+      await _auth!.signInWithCredential(credential);
       _isDemo = false;
+      _firebaseService.setMockMode(false);
 
       return true;
     } on FirebaseAuthException catch (e) {
@@ -158,12 +187,13 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.loading;
       notifyListeners();
 
-      if (!_isDemo) {
-        await _googleSignIn.signOut();
-        await _auth.signOut();
+      if (!_isDemo && _auth != null && _googleSignIn != null) {
+        await _googleSignIn!.signOut();
+        await _auth!.signOut();
       }
 
       _isDemo = false;
+      _firebaseService.setMockMode(false);
       _user = null;
       _userProfile = null;
       _status = AuthStatus.unauthenticated;
