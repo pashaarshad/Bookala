@@ -138,7 +138,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
             slivers: [
               // App Bar
               SliverAppBar(
-                expandedHeight: 200,
+                expandedHeight: 240,
                 pinned: true,
                 backgroundColor: AppTheme.backgroundColor,
                 flexibleSpace: FlexibleSpaceBar(

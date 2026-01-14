@@ -1,5 +1,7 @@
 import 'dart:io';
-import 'package:flutter_sms/flutter_sms.dart';
+// import 'package:flutter_sms/flutter_sms.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,8 @@ import '../models/customer.dart';
 import '../models/transaction.dart';
 
 class SmsService {
+  static const platform = MethodChannel('com.bookala.bookala/sms');
+
   // Check and request SMS permission
   Future<bool> checkAndRequestPermission() async {
     final status = await Permission.sms.status;
@@ -61,7 +65,7 @@ Thank you for your business!
 ''';
   }
 
-  // Send SMS directly (requires SEND_SMS permission)
+  // Send SMS directly (requires SEND_SMS permission) - FULLY AUTOMATIC
   Future<bool> sendSms({
     required String phoneNumber,
     required String message,
@@ -73,26 +77,32 @@ Thank you for your business!
       if (Platform.isAndroid) {
         final hasPermission = await checkAndRequestPermission();
         if (!hasPermission) {
-          // Fall back to SMS intent
-          return await _sendSmsIntent(cleanNumber, message);
+          // Permission denied - cannot send automatically
+          debugPrint('SMS permission denied');
+          return false;
         }
 
-        // Try direct SMS
-        final result = await sendSMS(
-          message: message,
-          recipients: [cleanNumber],
-          sendDirect: true,
-        );
-
-        return result == 'sent' || result == 'SMS Sent!';
+        // Try direct SMS using Native Channel - FULLY AUTOMATIC
+        try {
+          final String result = await platform.invokeMethod('sendSms', {
+            'phone': cleanNumber,
+            'message': message,
+          });
+          debugPrint('SMS sent automatically: $result');
+          return result == 'sent';
+        } catch (e) {
+          debugPrint("Failed to send SMS natively: '$e'.");
+          // Don't fall back to intent - just return false for automatic mode
+          return false;
+        }
       } else {
-        // iOS doesn't support direct SMS, use intent
-        return await _sendSmsIntent(cleanNumber, message);
+        // iOS doesn't support direct SMS
+        debugPrint('iOS does not support automatic SMS');
+        return false;
       }
     } catch (e) {
-      print('Error sending SMS: $e');
-      // Fall back to SMS intent
-      return await _sendSmsIntent(phoneNumber, message);
+      debugPrint('Error sending SMS: $e');
+      return false;
     }
   }
 

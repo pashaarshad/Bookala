@@ -58,8 +58,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       listen: false,
     );
 
-    customerProvider.init();
-    transactionProvider.init();
+    // Await async init methods
+    await customerProvider.init();
+    await transactionProvider.init();
     await locationProvider.init();
 
     // Get initial location and check for nearby customers
@@ -742,15 +743,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       shape: const CircularNotchedRectangle(),
       notchMargin: 8,
       color: AppTheme.surfaceColor,
+      height: 60,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNavItem(
-            0,
-            Icons.dashboard_outlined,
-            Icons.dashboard,
-            'Dashboard',
-          ),
+          _buildNavItem(0, Icons.dashboard_outlined, Icons.dashboard, 'Home'),
           const SizedBox(width: 48), // Space for FAB
           _buildNavItem(1, Icons.people_outline, Icons.people, 'Customers'),
         ],
@@ -769,19 +766,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       onTap: () => setState(() => _currentIndex = index),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               isActive ? activeIcon : icon,
               color: isActive ? AppTheme.primaryColor : AppTheme.textMuted,
+              size: 22,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               label,
               style: GoogleFonts.inter(
-                fontSize: 12,
+                fontSize: 11,
                 color: isActive ? AppTheme.primaryColor : AppTheme.textMuted,
               ),
             ),

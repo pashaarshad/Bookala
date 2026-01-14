@@ -41,11 +41,6 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin flutter_contacts, co.quis.flutter_contacts.FlutterContactsPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new com.example.flutter_sms.FlutterSmsPlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin flutter_sms, com.example.flutter_sms.FlutterSmsPlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new com.baseflow.geolocator.GeolocatorPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin geolocator_android, com.baseflow.geolocator.GeolocatorPlugin", e);

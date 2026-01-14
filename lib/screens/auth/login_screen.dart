@@ -21,34 +21,39 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Automatically trigger demo login for the user
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            setState(() => _statusMessage = 'Auto-filling credentials...');
-            Future.delayed(const Duration(seconds: 1), () {
-              if (mounted) {
-                setState(() => _statusMessage = 'Logging in as test123...');
-                _signInAsDemo();
-              }
-            });
-          }
-        });
-      }
-    });
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.signInWithGoogle();
-    if (success && mounted) {
-      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Connecting to Google...';
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.signInWithGoogle();
+      if (success && mounted) {
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
+      } else if (mounted) {
+        setState(
+          () => _statusMessage = 'Google Sign-In failed. Try Demo Mode.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _statusMessage = 'Error: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+  }
+
+  Future<void> _handleDemoLogin() async {
+    // Direct single-click demo login
+    setState(() => _statusMessage = 'Logging in as Demo User...');
+    await _signInAsDemo();
   }
 
   Future<void> _signInAsDemo() async {
@@ -223,9 +228,9 @@ class _LoginScreenState extends State<LoginScreen> {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: _isLoading ? null : _signInAsDemo,
+        onPressed: _isLoading ? null : _handleDemoLogin,
         icon: const Icon(Icons.login),
-        label: const Text('Try Demo Mode (No Login)'),
+        label: const Text('Demo Login (Offline Mode)'),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           side: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.5)),

@@ -87,37 +87,11 @@ class CustomerCard extends StatelessWidget {
                             ),
                           ),
                           if (isNearby) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.nearbyColor.withValues(
-                                  alpha: 0.2,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    size: 12,
-                                    color: AppTheme.nearbyColor,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Nearby',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.nearbyColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.location_on,
+                              size: 18,
+                              color: AppTheme.nearbyColor,
                             ),
                           ],
                         ],
