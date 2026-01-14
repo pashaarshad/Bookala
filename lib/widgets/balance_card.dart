@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+// import 'package:google_fonts/google_fonts.dart';
 
 class BalanceCard extends StatelessWidget {
   final String title;
@@ -21,13 +21,16 @@ class BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get text theme (which uses Merriweather/Lato)
+    final textTheme = Theme.of(context).textTheme;
+
     return Container(
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: (gradient.colors.first).withValues(alpha: 0.4),
+            color: (gradient.colors.first).withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -50,42 +53,42 @@ class BalanceCard extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(icon, color: Colors.white, size: 24),
+                      child: Icon(icon, color: Colors.white, size: 22),
                     ),
                     if (onTap != null)
                       Icon(
                         Icons.arrow_forward_ios,
                         color: Colors.white.withValues(alpha: 0.7),
-                        size: 16,
+                        size: 14,
                       ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Text(
                   title,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
+                  style: textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 14,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '₹${amount.toStringAsFixed(0)}',
-                  style: GoogleFonts.poppins(
+                  style: textTheme.headlineLarge?.copyWith(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    height: 1.1,
                   ),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
+                    style: textTheme.bodySmall?.copyWith(
                       color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),

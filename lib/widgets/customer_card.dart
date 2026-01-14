@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+// import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 import '../models/customer.dart';
 
@@ -21,21 +21,20 @@ class CustomerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        gradient: AppTheme.cardGradient,
+        color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: isNearby
-            ? Border.all(color: AppTheme.nearbyColor, width: 2)
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(
+          color: isNearby
+              ? AppTheme.nearbyColor
+              : Colors.white.withValues(alpha: 0.05),
+          width: isNearby ? 1.5 : 1,
+        ),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Material(
         color: Colors.transparent,
@@ -46,28 +45,31 @@ class CustomerCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                // Avatar
+                // Avatar - Simple and Elegant
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(14),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Center(
                     child: Text(
                       customer.name.isNotEmpty
                           ? customer.name[0].toUpperCase()
                           : '?',
-                      style: GoogleFonts.poppins(
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: AppTheme.primaryColor,
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
+
                 // Details
                 Expanded(
                   child: Column(
@@ -78,10 +80,9 @@ class CustomerCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               customer.name,
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -90,17 +91,17 @@ class CustomerCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Icon(
                               Icons.location_on,
-                              size: 18,
+                              size: 16,
                               color: AppTheme.nearbyColor,
                             ),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Row(
                         children: [
                           Icon(
-                            Icons.store_outlined,
+                            Icons.store_mall_directory_outlined,
                             size: 14,
                             color: AppTheme.textMuted,
                           ),
@@ -110,9 +111,9 @@ class CustomerCard extends StatelessWidget {
                               customer.shopName.isNotEmpty
                                   ? customer.shopName
                                   : 'No shop name',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
+                              style: theme.textTheme.bodyMedium?.copyWith(
                                 color: AppTheme.textSecondary,
+                                fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -120,59 +121,41 @@ class CustomerCard extends StatelessWidget {
                         ],
                       ),
                       if (distanceText != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.near_me_outlined,
-                              size: 14,
-                              color: AppTheme.textMuted,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              distanceText!,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: AppTheme.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
+                        const SizedBox(height: 2),
+                        Text(distanceText!, style: theme.textTheme.bodySmall),
                       ],
                     ],
                   ),
                 ),
+
+                // Balance - Right aligned
                 const SizedBox(width: 12),
-                // Balance
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
                       '₹${customer.balance.abs().toStringAsFixed(0)}',
-                      style: GoogleFonts.poppins(
+                      style: theme.textTheme.headlineSmall?.copyWith(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
                         color: customer.balance >= 0
                             ? AppTheme.creditColor
                             : AppTheme.debitColor,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      customer.balance > 0
-                          ? 'To receive'
-                          : customer.balance < 0
-                          ? 'To pay'
-                          : 'Settled',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: AppTheme.textMuted,
+                      (customer.balance > 0
+                              ? 'Receive'
+                              : customer.balance < 0
+                              ? 'Pay'
+                              : 'Settled')
+                          .toUpperCase(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_right, color: AppTheme.textMuted),
               ],
             ),
           ),

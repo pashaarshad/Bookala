@@ -266,17 +266,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 Text(
                   'Hello, ${authProvider.userProfile?.name.split(' ').first ?? 'User'} 👋',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   'Manage your accounts',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppTheme.textSecondary,
+                    fontSize: 13,
                   ),
                 ),
               ],
@@ -368,9 +367,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       Text(
                         'Net Balance',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 15,
                         ),
                       ),
                       Container(
@@ -379,15 +378,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           '${customerProvider.totalCustomers} Customers',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.white,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.white, fontSize: 12),
                         ),
                       ),
                     ],
@@ -395,18 +392,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 8),
                   Text(
                     '₹${customerProvider.totalBalance.abs().toStringAsFixed(0)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 36,
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      fontSize: 38,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                      height: 1.1,
                     ),
                   ),
                   Text(
                     customerProvider.totalBalance >= 0
                         ? 'You will receive'
                         : 'You need to pay',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 14,
                       color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
