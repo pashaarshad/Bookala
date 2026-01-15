@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../config/theme.dart';
 import '../../models/transaction.dart';
 import '../../providers/customer_provider.dart';
@@ -9,6 +10,7 @@ import '../../providers/transaction_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/gradient_button.dart';
+import '../../services/sms_service.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final String customerId;
@@ -23,10 +25,77 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _smsService = SmsService();
 
   TransactionType _selectedType = TransactionType.credit;
   bool _sendSms = true;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check SMS permission on load
+    _checkSmsPermission();
+  }
+
+  Future<void> _checkSmsPermission() async {
+    final status = await _smsService.checkPermissionStatus();
+    if (!status.isGranted && _sendSms) {
+      // SMS toggle is on but permission not granted
+      // Show info that permission is needed
+    }
+  }
+
+  Future<bool> _requestSmsPermission() async {
+    final status = await Permission.sms.status;
+
+    if (status.isGranted) return true;
+
+    if (status.isDenied) {
+      final result = await Permission.sms.request();
+      if (result.isGranted) return true;
+    }
+
+    // Permission denied or permanently denied - show dialog
+    if (mounted) {
+      final shouldOpenSettings = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          title: Text(
+            '📱 SMS Permission Required',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          content: Text(
+            'To send automatic SMS notifications to your customers, please enable SMS permission in Settings.\n\nWithout this, you\'ll need to manually tap "Send" each time.',
+            style: GoogleFonts.inter(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+              ),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldOpenSettings == true) {
+        await openAppSettings();
+      }
+    }
+
+    return false;
+  }
 
   @override
   void dispose() {
@@ -37,6 +106,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   Future<void> _saveTransaction() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // If SMS is enabled, check permission first
+    if (_sendSms) {
+      final hasPermission = await _requestSmsPermission();
+      if (!hasPermission && mounted) {
+        // Show snackbar that SMS will open manually
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'SMS permission not granted. SMS app will open for you to send manually.',
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
 
     setState(() => _isLoading = true);
 
