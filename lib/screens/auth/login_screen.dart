@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/gradient_button.dart';
 
@@ -18,6 +17,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
 
+  Future<void> _signInAsDemo() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Logging in as Demo User...';
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signInAsDemo();
+      // AppWrapper will handle navigation
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _signInWithGoogle() async {
     setState(() {
       _isLoading = true;
@@ -26,26 +45,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-      setState(() => _statusMessage = 'Authenticating...');
-
-      // We wait for the result.
-      // If success, AuthProvider state changes -> AppWrapper rebuilds -> Application switches to HomeScreen.
-      // We DO NOT manually navigate here.
       final success = await authProvider.signInWithGoogle();
 
       if (!success && mounted) {
-        // Only if failed do we stay here and show error
-        final error =
-            authProvider.errorMessage ?? 'Sign in failed. Please try again.';
+        final error = authProvider.errorMessage ?? 'Sign in failed';
         setState(() {
           _statusMessage = error;
           _isLoading = false;
         });
       }
-      // On success, this widget will be disposed, so no need to stop loading.
     } catch (e) {
-      debugPrint('Login screen error: $e');
       if (mounted) {
         setState(() {
           _statusMessage = 'Error: ${e.toString()}';
@@ -111,7 +120,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: GoogleFonts.inter(
                           color:
                               _statusMessage.contains('Error') ||
-                                  _statusMessage.contains('failed')
+                                  _statusMessage.contains('failed') ||
+                                  _statusMessage.contains('not configured')
                               ? AppTheme.debitColor
                               : AppTheme.primaryColor,
                           fontWeight: FontWeight.w500,
@@ -120,28 +130,34 @@ class _LoginScreenState extends State<LoginScreen> {
                       ).animate().fadeIn(),
                     ),
 
-                  _buildSignInButton()
+                  // Demo Login Button (Primary for now)
+                  _buildDemoButton()
                       .animate()
                       .fadeIn(delay: 800.ms, duration: 600.ms)
                       .slideY(begin: 0.5, end: 0),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Sign in with your Google account to securely\nstore your data in the cloud.',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: AppTheme.textMuted,
-                    ),
-                    textAlign: TextAlign.center,
-                  ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
                   const SizedBox(height: 16),
-                  Text(
-                    'By signing in, you agree to our Terms of Service',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppTheme.textMuted,
+                  // Google Button (Disabled until Firebase is set up)
+                  _buildSignInButton()
+                      .animate()
+                      .fadeIn(delay: 900.ms, duration: 600.ms)
+                      .slideY(begin: 0.5, end: 0),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
                     ),
-                    textAlign: TextAlign.center,
-                  ).animate().fadeIn(delay: 1100.ms, duration: 600.ms),
+                    child: Text(
+                      '⚠️ Firebase Setup Required\nGoogle Sign-In will work after setup',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.orange,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
                 ],
               ),
             ),
@@ -160,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.4),
+            color: AppTheme.primaryColor.withOpacity(0.4),
             blurRadius: 32,
             offset: const Offset(0, 12),
           ),
@@ -208,14 +224,29 @@ class _LoginScreenState extends State<LoginScreen> {
     }).toList();
   }
 
-  Widget _buildSignInButton() {
+  Widget _buildDemoButton() {
     return SizedBox(
       width: double.infinity,
       child: GradientButton(
-        text: 'Continue with Google',
-        icon: Icons.g_mobiledata_rounded,
+        text: '🚀 Demo Login (Test App)',
+        icon: Icons.play_arrow,
         isLoading: _isLoading,
-        onPressed: _signInWithGoogle,
+        onPressed: _signInAsDemo,
+      ),
+    );
+  }
+
+  Widget _buildSignInButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isLoading ? null : _signInWithGoogle,
+        icon: const Icon(Icons.g_mobiledata_rounded),
+        label: const Text('Continue with Google'),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+        ),
       ),
     );
   }
