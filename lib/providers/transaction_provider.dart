@@ -224,11 +224,19 @@ class TransactionProvider extends ChangeNotifier {
       _transactions.removeWhere((t) => t.id == transaction.id);
       notifyListeners();
 
-      // Sync to Firebase in background
+      // Sync to Firebase in background and clean up pending sync
       if (_isOnline) {
-        _firebaseService.deleteTransaction(transaction).catchError((e) {
-          debugPrint('Background delete failed: $e');
-        });
+        _firebaseService
+            .deleteTransaction(transaction)
+            .then((_) {
+              // Successfully deleted from Firebase - remove from pending sync
+              _localStorage.removePendingSyncItem(transaction.id);
+              debugPrint('Transaction ${transaction.id} deleted from Firebase');
+            })
+            .catchError((e) {
+              debugPrint('Background delete failed: $e');
+              // Keep in pending sync queue for retry
+            });
       }
 
       return true;

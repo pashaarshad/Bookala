@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +16,13 @@ class FirebaseService {
   final Map<String, Customer> _mockCustomers = {};
   final Map<String, CustomerTransaction> _mockTransactions = {};
 
+  // StreamControllers for mock mode to enable real-time updates
+  final StreamController<List<Customer>> _mockCustomersController =
+      StreamController<List<Customer>>.broadcast();
+  final StreamController<List<CustomerTransaction>>
+  _mockTransactionsController =
+      StreamController<List<CustomerTransaction>>.broadcast();
+
   FirebaseService() {
     try {
       if (Firebase.apps.isNotEmpty) {
@@ -25,6 +33,21 @@ class FirebaseService {
       }
     } catch (e) {
       _isMock = true;
+    }
+  }
+
+  // Notify mock streams when data changes
+  void _notifyMockCustomersChanged() {
+    if (_isMock) {
+      _mockCustomersController.add(_mockCustomers.values.toList());
+    }
+  }
+
+  void _notifyMockTransactionsChanged() {
+    if (_isMock) {
+      final transactions = _mockTransactions.values.toList();
+      transactions.sort((a, b) => b.date.compareTo(a.date));
+      _mockTransactionsController.add(transactions);
     }
   }
 
@@ -113,7 +136,9 @@ class FirebaseService {
   // Get all customers stream
   Stream<List<Customer>> getCustomersStream() {
     if (_isMock) {
-      return Stream.value(_mockCustomers.values.toList());
+      // Return broadcast stream and emit initial data
+      Future.microtask(() => _notifyMockCustomersChanged());
+      return _mockCustomersController.stream;
     }
     if (currentUserId == null || _firestore == null) return Stream.value([]);
 
@@ -186,6 +211,7 @@ class FirebaseService {
   Future<String> addCustomer(Customer customer) async {
     if (_isMock) {
       _mockCustomers[customer.id] = customer;
+      _notifyMockCustomersChanged(); // Notify UI
       return customer.id;
     }
 
@@ -206,6 +232,7 @@ class FirebaseService {
   Future<void> updateCustomer(Customer customer) async {
     if (_isMock) {
       _mockCustomers[customer.id] = customer;
+      _notifyMockCustomersChanged(); // Notify UI
       return;
     }
 
@@ -223,6 +250,7 @@ class FirebaseService {
   Future<void> deleteCustomer(String customerId) async {
     if (_isMock) {
       _mockCustomers.remove(customerId);
+      _notifyMockCustomersChanged(); // Notify UI
       return;
     }
 
@@ -254,11 +282,12 @@ class FirebaseService {
   // Get transactions stream for a customer
   Stream<List<CustomerTransaction>> getTransactionsStream(String customerId) {
     if (_isMock) {
-      final transactions = _mockTransactions.values
-          .where((t) => t.customerId == customerId)
-          .toList();
-      transactions.sort((a, b) => b.date.compareTo(a.date));
-      return Stream.value(transactions);
+      // Return filtered stream from broadcast controller
+      Future.microtask(() => _notifyMockTransactionsChanged());
+      return _mockTransactionsController.stream.map(
+        (transactions) =>
+            transactions.where((t) => t.customerId == customerId).toList(),
+      );
     }
 
     if (currentUserId == null || _firestore == null) return Stream.value([]);
@@ -280,9 +309,8 @@ class FirebaseService {
   // Get all transactions stream
   Stream<List<CustomerTransaction>> getAllTransactionsStream() {
     if (_isMock) {
-      final transactions = _mockTransactions.values.toList();
-      transactions.sort((a, b) => b.date.compareTo(a.date));
-      return Stream.value(transactions);
+      Future.microtask(() => _notifyMockTransactionsChanged());
+      return _mockTransactionsController.stream;
     }
 
     if (currentUserId == null || _firestore == null) return Stream.value([]);
@@ -321,7 +349,9 @@ class FirebaseService {
                   ? transaction.amount
                   : 0),
         );
+        _notifyMockCustomersChanged(); // Notify customer UI
       }
+      _notifyMockTransactionsChanged(); // Notify transaction UI
       return transaction.id;
     }
 
@@ -378,7 +408,9 @@ class FirebaseService {
                   ? transaction.amount
                   : 0),
         );
+        _notifyMockCustomersChanged(); // Notify customer UI
       }
+      _notifyMockTransactionsChanged(); // Notify transaction UI
       return;
     }
 

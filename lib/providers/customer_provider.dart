@@ -75,11 +75,29 @@ class CustomerProvider extends ChangeNotifier {
     _customersSubscription?.cancel();
     _customersSubscription = _firebaseService.getCustomersStream().listen(
       (customers) {
-        // Merge Firebase data with local
+        // CRITICAL FIX: Don't blindly replace local data with Firebase data
+        // This was causing all customers to disappear when deleting one!
+
         if (customers.isNotEmpty) {
-          _customers = customers;
-          _localStorage.saveCustomers(customers); // Cache locally
+          // Only update from Firebase if we don't have local pending changes
+          final pendingChanges = _localStorage.getPendingSyncItems();
+          final hasPendingDeletes = pendingChanges.any(
+            (item) => item['type'] == 'customer' && item['action'] == 'delete',
+          );
+
+          if (!hasPendingDeletes) {
+            // Safe to update from Firebase
+            _customers = customers;
+            _localStorage.saveCustomers(customers); // Cache locally
+          } else {
+            // We have pending deletes - merge carefully
+            debugPrint('Skipping Firebase update - pending local changes');
+          }
+        } else if (_customers.isEmpty) {
+          // Only clear if we also have no local customers
+          _customers = [];
         }
+
         _isLoading = false;
         notifyListeners();
       },
@@ -285,11 +303,19 @@ class CustomerProvider extends ChangeNotifier {
       }
       notifyListeners();
 
-      // Sync to Firebase in background
+      // Sync to Firebase in background and clean up pending sync
       if (_isOnline) {
-        _firebaseService.deleteCustomer(customerId).catchError((e) {
-          debugPrint('Background delete failed: $e');
-        });
+        _firebaseService
+            .deleteCustomer(customerId)
+            .then((_) {
+              // Successfully deleted from Firebase - remove from pending sync
+              _localStorage.removePendingSyncItem(customerId);
+              debugPrint('Customer $customerId deleted from Firebase');
+            })
+            .catchError((e) {
+              debugPrint('Background delete failed: $e');
+              // Keep in pending sync queue for retry
+            });
       }
 
       return true;
