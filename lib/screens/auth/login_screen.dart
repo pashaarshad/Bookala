@@ -28,29 +28,29 @@ class _LoginScreenState extends State<LoginScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       setState(() => _statusMessage = 'Authenticating...');
+
+      // We wait for the result.
+      // If success, AuthProvider state changes -> AppWrapper rebuilds -> Application switches to HomeScreen.
+      // We DO NOT manually navigate here.
       final success = await authProvider.signInWithGoogle();
 
-      debugPrint('Sign-in result: $success, status: ${authProvider.status}');
-
-      if (success && mounted) {
-        setState(() => _statusMessage = 'Success! Loading dashboard...');
-        await Future.delayed(const Duration(milliseconds: 300));
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, AppRoutes.home);
-        }
-      } else if (mounted) {
+      if (!success && mounted) {
+        // Only if failed do we stay here and show error
         final error =
             authProvider.errorMessage ?? 'Sign in failed. Please try again.';
-        setState(() => _statusMessage = error);
+        setState(() {
+          _statusMessage = error;
+          _isLoading = false;
+        });
       }
+      // On success, this widget will be disposed, so no need to stop loading.
     } catch (e) {
       debugPrint('Login screen error: $e');
       if (mounted) {
-        setState(() => _statusMessage = 'Error: ${e.toString()}');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _statusMessage = 'Error: ${e.toString()}';
+          _isLoading = false;
+        });
       }
     }
   }

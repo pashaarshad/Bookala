@@ -30,11 +30,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       if (Firebase.apps.isNotEmpty) {
         _auth = FirebaseAuth.instance;
-        // Web Client ID from google-services.json
-        _googleSignIn = GoogleSignIn(
-          serverClientId:
-              '583387496324-11askmipvnrob3hg5n4d4komre5k8b6g.apps.googleusercontent.com',
-        );
+        _googleSignIn = GoogleSignIn();
       }
     } catch (e) {
       debugPrint('AuthProvider: Firebase not available: $e');
@@ -45,21 +41,33 @@ class AuthProvider extends ChangeNotifier {
   // Initialize and check auth state
   void _init() {
     if (_auth != null) {
-      _auth!.authStateChanges().listen((User? user) async {
-        if (user != null) {
-          _user = user;
-          await _loadUserProfile();
-          _status = AuthStatus.authenticated;
-        } else {
-          _user = null;
-          _userProfile = null;
-          _status = AuthStatus.unauthenticated;
-        }
-        notifyListeners();
-      });
+      // LISTEN TO FIREBASE AUTH STATE
+      _auth!.authStateChanges().listen(
+        (User? user) async {
+          debugPrint('AuthStateChanged: ${user?.email}');
+
+          if (user != null) {
+            _user = user;
+            // Don't set authenticated yet, wait for profile loading (optional, but safer)
+            await _loadUserProfile();
+            _status = AuthStatus.authenticated;
+          } else {
+            _user = null;
+            _userProfile = null;
+            _status = AuthStatus.unauthenticated;
+          }
+          notifyListeners();
+        },
+        onError: (e) {
+          debugPrint('Auth listener error: $e');
+          _status = AuthStatus.error;
+          _errorMessage = e.toString();
+          notifyListeners();
+        },
+      );
     } else {
       _status = AuthStatus.error;
-      _errorMessage = 'Firebase is not configured. Please check your setup.';
+      _errorMessage = 'Firebase is not configured.';
       notifyListeners();
     }
   }
@@ -91,75 +99,54 @@ class AuthProvider extends ChangeNotifier {
   // Sign in with Google
   Future<bool> signInWithGoogle() async {
     if (_auth == null || _googleSignIn == null) {
-      _status = AuthStatus.error;
-      _errorMessage = 'Firebase is not configured. Please reinstall the app.';
+      _errorMessage = 'Firebase not initialized';
       notifyListeners();
       return false;
     }
 
     try {
+      // Set loading state
       _status = AuthStatus.loading;
-      _errorMessage = null;
       notifyListeners();
 
-      debugPrint('Starting Google Sign-In...');
-
-      // Trigger the authentication flow
+      // 1. Google Sign In
+      debugPrint('Starting interactive sign in...');
       final GoogleSignInAccount? googleUser = await _googleSignIn!.signIn();
 
       if (googleUser == null) {
-        debugPrint('Google Sign-In cancelled by user');
+        // User cancelled
+        debugPrint('User cancelled sign in');
         _status = AuthStatus.unauthenticated;
-        _errorMessage = 'Sign in cancelled';
         notifyListeners();
         return false;
       }
 
-      debugPrint('Got Google user: ${googleUser.email}');
-
-      // Obtain the auth details from the request
+      // 2. Get Credential
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-
-      debugPrint('Got Google auth tokens');
-
-      // Create a new credential
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Sign in to Firebase with the credential
-      debugPrint('Signing in to Firebase...');
-      final userCredential = await _auth!.signInWithCredential(credential);
+      // 3. Firebase Sign In
+      debugPrint('Signing in to Firebase with credential...');
+      await _auth!.signInWithCredential(credential);
 
-      if (userCredential.user != null) {
-        debugPrint(
-          'Firebase sign-in successful: ${userCredential.user!.email}',
-        );
-        _user = userCredential.user;
-        await _loadUserProfile();
-        _status = AuthStatus.authenticated;
-        notifyListeners();
-        return true;
-      } else {
-        debugPrint('Firebase sign-in failed: no user returned');
-        _status = AuthStatus.error;
-        _errorMessage = 'Authentication failed';
-        notifyListeners();
-        return false;
-      }
-    } on FirebaseAuthException catch (e) {
-      debugPrint('FirebaseAuthException: ${e.message}');
-      _status = AuthStatus.error;
-      _errorMessage = e.message ?? 'Authentication failed';
-      notifyListeners();
-      return false;
+      // We don't need to manually set authenticated here because
+      // the stream listener in _init() will fire and do it for us.
+
+      return true;
     } catch (e) {
-      debugPrint('Sign-in error: $e');
+      debugPrint('SignIn Error: $e');
       _status = AuthStatus.error;
-      _errorMessage = 'Sign in failed: $e';
+      _errorMessage = 'Login failed: ${e.toString()}';
       notifyListeners();
+
+      // Ensure we reset to unauthenticated if it failed so retry works
+      if (_user == null) {
+        await signOut();
+      }
       return false;
     }
   }
@@ -170,15 +157,10 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.loading;
       notifyListeners();
 
-      if (_auth != null && _googleSignIn != null) {
-        await _googleSignIn!.signOut();
-        await _auth!.signOut();
-      }
+      if (_googleSignIn != null) await _googleSignIn!.signOut();
+      if (_auth != null) await _auth!.signOut();
 
-      _user = null;
-      _userProfile = null;
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
+      // Listener will handle state update to unauthenticated
     } catch (e) {
       _errorMessage = 'Error signing out';
       notifyListeners();
