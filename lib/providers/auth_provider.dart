@@ -31,11 +31,13 @@ class AuthProvider extends ChangeNotifier {
     _firebaseService = FirebaseService();
     try {
       // Safely initialize Firebase instances if available
-      // Import 'package:firebase_core/firebase_core.dart' to check apps
-      // Wait, I should import it at the top.
       if (Firebase.apps.isNotEmpty) {
         _auth = FirebaseAuth.instance;
-        _googleSignIn = GoogleSignIn();
+        // Use the Web Client ID from google-services.json (client_type: 3)
+        _googleSignIn = GoogleSignIn(
+          serverClientId:
+              '583387496324-11askmipvnrob3hg5n4d4komre5k8b6g.apps.googleusercontent.com',
+        );
       }
     } catch (e) {
       debugPrint('AuthProvider: Firebase not available: $e');
