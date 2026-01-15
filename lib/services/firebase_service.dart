@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
 import '../models/user_profile.dart';
@@ -10,89 +10,30 @@ import '../config/constants.dart';
 class FirebaseService {
   FirebaseFirestore? _firestore;
   FirebaseAuth? _auth;
-  bool _isMock = false;
-
-  // Mock Data Store
-  final Map<String, Customer> _mockCustomers = {};
-  final Map<String, CustomerTransaction> _mockTransactions = {};
-
-  // StreamControllers for mock mode to enable real-time updates
-  final StreamController<List<Customer>> _mockCustomersController =
-      StreamController<List<Customer>>.broadcast();
-  final StreamController<List<CustomerTransaction>>
-  _mockTransactionsController =
-      StreamController<List<CustomerTransaction>>.broadcast();
 
   FirebaseService() {
     try {
       if (Firebase.apps.isNotEmpty) {
         _firestore = FirebaseFirestore.instance;
         _auth = FirebaseAuth.instance;
-      } else {
-        _isMock = true;
       }
     } catch (e) {
-      _isMock = true;
-    }
-  }
-
-  // Notify mock streams when data changes
-  void _notifyMockCustomersChanged() {
-    if (_isMock) {
-      _mockCustomersController.add(_mockCustomers.values.toList());
-    }
-  }
-
-  void _notifyMockTransactionsChanged() {
-    if (_isMock) {
-      final transactions = _mockTransactions.values.toList();
-      transactions.sort((a, b) => b.date.compareTo(a.date));
-      _mockTransactionsController.add(transactions);
-    }
-  }
-
-  void setMockMode(bool isMock) {
-    _isMock = isMock;
-    if (isMock) {
-      // Initialize some dummy data for demo
-      _mockCustomers.clear();
-      _mockTransactions.clear();
-
-      final demoCustomer = Customer(
-        id: 'demo_cust_1',
-        name: 'Rahul Sharma',
-        phone: '+919876543210',
-        shopName: 'Sharma General Store',
-        totalCredit: 5000,
-        totalDebit: 2000,
-        latitude: 28.6139,
-        longitude: 77.2090,
-        radius: 100,
-        createdAt: DateTime.now(),
-      );
-      _mockCustomers[demoCustomer.id] = demoCustomer;
+      debugPrint('Firebase initialization error: $e');
     }
   }
 
   // Get current user ID
-  String? get currentUserId =>
-      _isMock ? 'demo_user_123' : _auth?.currentUser?.uid;
+  String? get currentUserId => _auth?.currentUser?.uid;
+
+  // Check if Firebase is available
+  bool get isAvailable =>
+      _firestore != null && _auth != null && currentUserId != null;
 
   // ==================== USER PROFILE ====================
 
   // Get user profile
   Future<UserProfile?> getUserProfile() async {
-    if (_isMock) {
-      return UserProfile(
-        id: 'demo_user_123',
-        email: 'demo@bookala.com',
-        name: 'Demo Admin',
-        createdAt: DateTime.now(),
-        businessName: 'Demo Business',
-      );
-    }
-
-    if (currentUserId == null || _firestore == null) return null;
+    if (!isAvailable) return null;
 
     try {
       final doc = await _firestore!
@@ -104,15 +45,14 @@ class FirebaseService {
         return UserProfile.fromFirestore(doc);
       }
     } catch (e) {
-      print('Firestore error: $e');
+      debugPrint('Firestore error: $e');
     }
     return null;
   }
 
   // Create or update user profile
   Future<void> saveUserProfile(UserProfile profile) async {
-    if (_isMock) return;
-    if (currentUserId == null || _firestore == null) return;
+    if (!isAvailable) return;
 
     await _firestore!
         .collection(AppConstants.usersCollection)
@@ -122,8 +62,7 @@ class FirebaseService {
 
   // Update last login
   Future<void> updateLastLogin() async {
-    if (_isMock) return;
-    if (currentUserId == null || _firestore == null) return;
+    if (!isAvailable) return;
 
     await _firestore!
         .collection(AppConstants.usersCollection)
@@ -135,12 +74,7 @@ class FirebaseService {
 
   // Get all customers stream
   Stream<List<Customer>> getCustomersStream() {
-    if (_isMock) {
-      // Return broadcast stream and emit initial data
-      Future.microtask(() => _notifyMockCustomersChanged());
-      return _mockCustomersController.stream;
-    }
-    if (currentUserId == null || _firestore == null) return Stream.value([]);
+    if (!isAvailable) return Stream.value([]);
 
     return _firestore!
         .collection(AppConstants.usersCollection)
@@ -156,10 +90,7 @@ class FirebaseService {
 
   // Get all customers (one-time fetch)
   Future<List<Customer>> getCustomers() async {
-    if (_isMock) {
-      return _mockCustomers.values.toList();
-    }
-    if (currentUserId == null || _firestore == null) return [];
+    if (!isAvailable) return [];
 
     final snapshot = await _firestore!
         .collection(AppConstants.usersCollection)
@@ -173,10 +104,7 @@ class FirebaseService {
 
   // Get single customer
   Future<Customer?> getCustomer(String customerId) async {
-    if (_isMock) {
-      return _mockCustomers[customerId];
-    }
-    if (currentUserId == null || _firestore == null) return null;
+    if (!isAvailable) return null;
 
     final doc = await _firestore!
         .collection(AppConstants.usersCollection)
@@ -193,10 +121,7 @@ class FirebaseService {
 
   // Get customer stream
   Stream<Customer?> getCustomerStream(String customerId) {
-    if (_isMock) {
-      return Stream.value(_mockCustomers[customerId]);
-    }
-    if (currentUserId == null || _firestore == null) return Stream.value(null);
+    if (!isAvailable) return Stream.value(null);
 
     return _firestore!
         .collection(AppConstants.usersCollection)
@@ -209,14 +134,8 @@ class FirebaseService {
 
   // Add customer
   Future<String> addCustomer(Customer customer) async {
-    if (_isMock) {
-      _mockCustomers[customer.id] = customer;
-      _notifyMockCustomersChanged(); // Notify UI
-      return customer.id;
-    }
-
-    if (currentUserId == null || _firestore == null) {
-      throw Exception('User not logged in');
+    if (!isAvailable) {
+      throw Exception('Not logged in');
     }
 
     final docRef = await _firestore!
@@ -230,13 +149,7 @@ class FirebaseService {
 
   // Update customer
   Future<void> updateCustomer(Customer customer) async {
-    if (_isMock) {
-      _mockCustomers[customer.id] = customer;
-      _notifyMockCustomersChanged(); // Notify UI
-      return;
-    }
-
-    if (currentUserId == null || _firestore == null) return;
+    if (!isAvailable) return;
 
     await _firestore!
         .collection(AppConstants.usersCollection)
@@ -248,13 +161,7 @@ class FirebaseService {
 
   // Delete customer
   Future<void> deleteCustomer(String customerId) async {
-    if (_isMock) {
-      _mockCustomers.remove(customerId);
-      _notifyMockCustomersChanged(); // Notify UI
-      return;
-    }
-
-    if (currentUserId == null || _firestore == null) return;
+    if (!isAvailable) return;
 
     // Delete all transactions for this customer first
     final transactions = await _firestore!
@@ -281,16 +188,7 @@ class FirebaseService {
 
   // Get transactions stream for a customer
   Stream<List<CustomerTransaction>> getTransactionsStream(String customerId) {
-    if (_isMock) {
-      // Return filtered stream from broadcast controller
-      Future.microtask(() => _notifyMockTransactionsChanged());
-      return _mockTransactionsController.stream.map(
-        (transactions) =>
-            transactions.where((t) => t.customerId == customerId).toList(),
-      );
-    }
-
-    if (currentUserId == null || _firestore == null) return Stream.value([]);
+    if (!isAvailable) return Stream.value([]);
 
     return _firestore!
         .collection(AppConstants.usersCollection)
@@ -308,12 +206,7 @@ class FirebaseService {
 
   // Get all transactions stream
   Stream<List<CustomerTransaction>> getAllTransactionsStream() {
-    if (_isMock) {
-      Future.microtask(() => _notifyMockTransactionsChanged());
-      return _mockTransactionsController.stream;
-    }
-
-    if (currentUserId == null || _firestore == null) return Stream.value([]);
+    if (!isAvailable) return Stream.value([]);
 
     return _firestore!
         .collection(AppConstants.usersCollection)
@@ -331,32 +224,8 @@ class FirebaseService {
 
   // Add transaction and update customer balance
   Future<String> addTransaction(CustomerTransaction transaction) async {
-    if (_isMock) {
-      _mockTransactions[transaction.id] = transaction;
-
-      // Update local customer
-      if (_mockCustomers.containsKey(transaction.customerId)) {
-        final cust = _mockCustomers[transaction.customerId]!;
-        _mockCustomers[transaction.customerId] = cust.copyWith(
-          totalCredit:
-              cust.totalCredit +
-              (transaction.type == TransactionType.credit
-                  ? transaction.amount
-                  : 0),
-          totalDebit:
-              cust.totalDebit +
-              (transaction.type == TransactionType.debit
-                  ? transaction.amount
-                  : 0),
-        );
-        _notifyMockCustomersChanged(); // Notify customer UI
-      }
-      _notifyMockTransactionsChanged(); // Notify transaction UI
-      return transaction.id;
-    }
-
-    if (currentUserId == null || _firestore == null) {
-      throw Exception('User not logged in');
+    if (!isAvailable) {
+      throw Exception('Not logged in');
     }
 
     // Add transaction
@@ -390,31 +259,7 @@ class FirebaseService {
 
   // Delete transaction and update customer balance
   Future<void> deleteTransaction(CustomerTransaction transaction) async {
-    if (_isMock) {
-      _mockTransactions.remove(transaction.id);
-
-      // Update local customer
-      if (_mockCustomers.containsKey(transaction.customerId)) {
-        final cust = _mockCustomers[transaction.customerId]!;
-        _mockCustomers[transaction.customerId] = cust.copyWith(
-          totalCredit:
-              cust.totalCredit -
-              (transaction.type == TransactionType.credit
-                  ? transaction.amount
-                  : 0),
-          totalDebit:
-              cust.totalDebit -
-              (transaction.type == TransactionType.debit
-                  ? transaction.amount
-                  : 0),
-        );
-        _notifyMockCustomersChanged(); // Notify customer UI
-      }
-      _notifyMockTransactionsChanged(); // Notify transaction UI
-      return;
-    }
-
-    if (currentUserId == null || _firestore == null) return;
+    if (!isAvailable) return;
 
     // Delete transaction
     await _firestore!
@@ -444,42 +289,20 @@ class FirebaseService {
     }
   }
 
-  // ==================== ANALYTICS ====================
+  // Get transactions by customer (one-time)
+  Future<List<CustomerTransaction>> getTransactions(String customerId) async {
+    if (!isAvailable) return [];
 
-  // Get dashboard totals
-  Future<Map<String, double>> getDashboardTotals() async {
-    if (_isMock) {
-      double totalCredit = 0;
-      double totalDebit = 0;
-      for (var c in _mockCustomers.values) {
-        totalCredit += c.totalCredit;
-        totalDebit += c.totalDebit;
-      }
-      return {
-        'credit': totalCredit,
-        'debit': totalDebit,
-        'balance': totalCredit - totalDebit,
-      };
-    }
+    final snapshot = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .where('customerId', isEqualTo: customerId)
+        .orderBy('date', descending: true)
+        .get();
 
-    if (currentUserId == null || _firestore == null) {
-      return {'credit': 0, 'debit': 0};
-    }
-
-    final customers = await getCustomers();
-
-    double totalCredit = 0;
-    double totalDebit = 0;
-
-    for (var customer in customers) {
-      totalCredit += customer.totalCredit;
-      totalDebit += customer.totalDebit;
-    }
-
-    return {
-      'credit': totalCredit,
-      'debit': totalDebit,
-      'balance': totalCredit - totalDebit,
-    };
+    return snapshot.docs
+        .map((doc) => CustomerTransaction.fromFirestore(doc))
+        .toList();
   }
 }

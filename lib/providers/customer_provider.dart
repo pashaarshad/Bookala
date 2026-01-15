@@ -1,44 +1,39 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/customer.dart';
 import '../services/firebase_service.dart';
-import '../services/local_storage_service.dart';
 
 class CustomerProvider extends ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
-  final LocalStorageService _localStorage = LocalStorageService();
 
   List<Customer> _customers = [];
   Customer? _selectedCustomer;
   bool _isLoading = false;
   String? _errorMessage;
+  String _searchQuery = '';
   StreamSubscription? _customersSubscription;
   StreamSubscription? _selectedCustomerSubscription;
-  StreamSubscription? _connectivitySubscription;
-  String _searchQuery = '';
-  bool _isOnline = true;
 
   // Getters
-  List<Customer> get customers => _searchQuery.isEmpty
-      ? _customers
-      : _customers
-            .where(
-              (c) =>
-                  c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                  c.shopName.toLowerCase().contains(
-                    _searchQuery.toLowerCase(),
-                  ) ||
-                  c.phone.contains(_searchQuery),
-            )
-            .toList();
+  List<Customer> get customers {
+    if (_searchQuery.isEmpty) return _customers;
+    return _customers
+        .where(
+          (c) =>
+              c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              c.shopName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              c.phone.contains(_searchQuery),
+        )
+        .toList();
+  }
 
+  // All customers without filtering (for location-based features)
   List<Customer> get allCustomers => _customers;
+
   Customer? get selectedCustomer => _selectedCustomer;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String get searchQuery => _searchQuery;
-  bool get isOnline => _isOnline;
 
   // Statistics
   int get totalCustomers => _customers.length;
@@ -48,26 +43,10 @@ class CustomerProvider extends ChangeNotifier {
   int get customersWithOutstandingBalance =>
       _customers.where((c) => c.balance > 0).length;
 
-  // Initialize with local storage first
+  // Initialize - Start listening to Firebase
   Future<void> init() async {
-    await _localStorage.init();
-
-    // Load from local storage first (instant)
-    _customers = _localStorage.getCustomers();
+    _isLoading = true;
     notifyListeners();
-
-    // Monitor connectivity
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      result,
-    ) {
-      _isOnline = result.first != ConnectivityResult.none;
-      if (_isOnline) {
-        _syncPendingChanges();
-      }
-      notifyListeners();
-    });
-
-    // Then try to sync with Firebase in background
     _startListening();
   }
 
@@ -75,85 +54,17 @@ class CustomerProvider extends ChangeNotifier {
     _customersSubscription?.cancel();
     _customersSubscription = _firebaseService.getCustomersStream().listen(
       (customers) {
-        // CRITICAL FIX: Don't blindly replace local data with Firebase data
-        // This was causing all customers to disappear when deleting one!
-
-        if (customers.isNotEmpty) {
-          // Only update from Firebase if we don't have local pending changes
-          final pendingChanges = _localStorage.getPendingSyncItems();
-          final hasPendingDeletes = pendingChanges.any(
-            (item) => item['type'] == 'customer' && item['action'] == 'delete',
-          );
-
-          if (!hasPendingDeletes) {
-            // Safe to update from Firebase
-            _customers = customers;
-            _localStorage.saveCustomers(customers); // Cache locally
-          } else {
-            // We have pending deletes - merge carefully
-            debugPrint('Skipping Firebase update - pending local changes');
-          }
-        } else if (_customers.isEmpty) {
-          // Only clear if we also have no local customers
-          _customers = [];
-        }
-
+        _customers = customers;
         _isLoading = false;
         notifyListeners();
       },
       onError: (error) {
-        // If Firebase fails, keep using local data
-        debugPrint('Firebase sync error: $error');
+        debugPrint('Firebase customers error: $error');
+        _errorMessage = 'Failed to load customers';
         _isLoading = false;
         notifyListeners();
       },
     );
-  }
-
-  // Background sync pending changes to Firebase
-  Future<void> _syncPendingChanges() async {
-    final pending = _localStorage.getPendingSyncItems();
-
-    for (final item in pending) {
-      try {
-        final type = item['type'] as String;
-        final id = item['id'] as String;
-        final action = item['action'] as String;
-
-        if (type == 'customer') {
-          if (action == 'add' || action == 'update') {
-            final customer = _customers.firstWhere(
-              (c) => c.id == id,
-              orElse: () => Customer(
-                id: '',
-                name: '',
-                shopName: '',
-                phone: '',
-                latitude: 0,
-                longitude: 0,
-                radius: 100,
-                createdAt: DateTime.now(),
-              ),
-            );
-            if (customer.id.isNotEmpty) {
-              if (action == 'add') {
-                await _firebaseService.addCustomer(customer);
-              } else {
-                await _firebaseService.updateCustomer(customer);
-              }
-            }
-          } else if (action == 'delete') {
-            await _firebaseService.deleteCustomer(id);
-          }
-        }
-
-        // Remove from pending after successful sync
-        await _localStorage.removePendingSyncItem(id);
-      } catch (e) {
-        debugPrint('Sync error for ${item['id']}: $e');
-        // Keep in pending queue, will retry later
-      }
-    }
   }
 
   // Set search query
@@ -170,16 +81,15 @@ class CustomerProvider extends ChangeNotifier {
 
   // Select a customer
   void selectCustomer(String customerId) {
-    // First try to find in local list
+    // Find in current list first
     try {
       _selectedCustomer = _customers.firstWhere((c) => c.id == customerId);
     } catch (e) {
-      // Not found in local list, set to null temporarily
       _selectedCustomer = null;
     }
     notifyListeners();
 
-    // Then listen for Firebase updates
+    // Listen for real-time updates
     _selectedCustomerSubscription?.cancel();
     _selectedCustomerSubscription = _firebaseService
         .getCustomerStream(customerId)
@@ -190,7 +100,6 @@ class CustomerProvider extends ChangeNotifier {
           },
           onError: (error) {
             debugPrint('Customer stream error: $error');
-            // Keep local data if Firebase fails
           },
         );
   }
@@ -202,85 +111,35 @@ class CustomerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add a new customer - LOCAL FIRST (instant)
+  // Add a new customer - FIREBASE DIRECT
   Future<String?> addCustomer(Customer customer) async {
     try {
-      // Save locally first - INSTANT response
-      final localId = await _localStorage.addCustomerLocally(customer);
-
-      // Update in-memory list immediately
-      final newCustomer = Customer(
-        id: localId,
-        name: customer.name,
-        shopName: customer.shopName,
-        phone: customer.phone,
-        latitude: customer.latitude,
-        longitude: customer.longitude,
-        radius: customer.radius,
-        createdAt: customer.createdAt,
-      );
-      _customers.add(newCustomer);
+      _isLoading = true;
       notifyListeners();
 
-      // Sync to Firebase in background (non-blocking)
-      if (_isOnline) {
-        _firebaseService
-            .addCustomer(customer)
-            .then((firebaseId) {
-              // Update local ID with Firebase ID if different
-              if (firebaseId != null && firebaseId != localId) {
-                final index = _customers.indexWhere((c) => c.id == localId);
-                if (index != -1) {
-                  _customers[index] = Customer(
-                    id: firebaseId,
-                    name: customer.name,
-                    shopName: customer.shopName,
-                    phone: customer.phone,
-                    latitude: customer.latitude,
-                    longitude: customer.longitude,
-                    radius: customer.radius,
-                    createdAt: customer.createdAt,
-                  );
-                  _localStorage.saveCustomers(_customers);
-                  _localStorage.removePendingSyncItem(localId);
-                  notifyListeners();
-                }
-              }
-            })
-            .catchError((e) {
-              debugPrint('Background sync failed: $e');
-              // Data is safe locally, will sync later
-            });
-      }
+      final id = await _firebaseService.addCustomer(customer);
 
-      return localId;
+      _isLoading = false;
+      notifyListeners();
+      return id;
     } catch (e) {
-      _errorMessage = 'Error adding customer';
+      _errorMessage = 'Error adding customer: $e';
+      _isLoading = false;
       notifyListeners();
       return null;
     }
   }
 
-  // Update a customer - LOCAL FIRST
+  // Update a customer - FIREBASE DIRECT
   Future<bool> updateCustomer(Customer customer) async {
     try {
-      // Update locally first
-      await _localStorage.updateCustomerLocally(customer);
+      await _firebaseService.updateCustomer(customer);
 
-      // Update in-memory
-      final index = _customers.indexWhere((c) => c.id == customer.id);
-      if (index != -1) {
-        _customers[index] = customer;
-        notifyListeners();
+      // Update selected customer if it's the same
+      if (_selectedCustomer?.id == customer.id) {
+        _selectedCustomer = customer;
       }
-
-      // Sync to Firebase in background
-      if (_isOnline) {
-        _firebaseService.updateCustomer(customer).catchError((e) {
-          debugPrint('Background update failed: $e');
-        });
-      }
-
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = 'Error updating customer';
@@ -289,35 +148,14 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
-  // Delete a customer - LOCAL FIRST
+  // Delete a customer - FIREBASE DIRECT
   Future<bool> deleteCustomer(String customerId) async {
     try {
-      // Delete locally first
-      await _localStorage.deleteCustomerLocally(customerId);
-
-      // Update in-memory
-      _customers.removeWhere((c) => c.id == customerId);
+      await _firebaseService.deleteCustomer(customerId);
 
       if (_selectedCustomer?.id == customerId) {
         clearSelectedCustomer();
       }
-      notifyListeners();
-
-      // Sync to Firebase in background and clean up pending sync
-      if (_isOnline) {
-        _firebaseService
-            .deleteCustomer(customerId)
-            .then((_) {
-              // Successfully deleted from Firebase - remove from pending sync
-              _localStorage.removePendingSyncItem(customerId);
-              debugPrint('Customer $customerId deleted from Firebase');
-            })
-            .catchError((e) {
-              debugPrint('Background delete failed: $e');
-              // Keep in pending sync queue for retry
-            });
-      }
-
       return true;
     } catch (e) {
       _errorMessage = 'Error deleting customer';
@@ -326,30 +164,44 @@ class CustomerProvider extends ChangeNotifier {
     }
   }
 
+  // Get customers sorted by balance (for reports)
+  List<Customer> getCustomersByBalance({bool descending = true}) {
+    final sorted = List<Customer>.from(_customers);
+    sorted.sort(
+      (a, b) => descending
+          ? b.balance.compareTo(a.balance)
+          : a.balance.compareTo(b.balance),
+    );
+    return sorted;
+  }
+
+  // Get customers with outstanding balance
+  List<Customer> getCustomersWithOutstanding() {
+    return _customers.where((c) => c.balance > 0).toList();
+  }
+
+  // Check if customer is nearby (for location-based features)
+  bool isCustomerNearby(Customer customer, double userLat, double userLng) {
+    if (customer.latitude == 0 && customer.longitude == 0) return false;
+
+    // Simple distance calculation (approximate)
+    final latDiff = (customer.latitude - userLat).abs();
+    final lngDiff = (customer.longitude - userLng).abs();
+    final approxDistance = (latDiff + lngDiff) * 111000; // roughly in meters
+
+    return approxDistance <= customer.radius;
+  }
+
+  // Get nearby customers
+  List<Customer> getNearbyCustomers(double userLat, double userLng) {
+    return _customers
+        .where((c) => isCustomerNearby(c, userLat, userLng))
+        .toList();
+  }
+
   // Clear error
   void clearError() {
     _errorMessage = null;
-    notifyListeners();
-  }
-
-  // Refresh customers
-  Future<void> refresh() async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      if (_isOnline) {
-        _customers = await _firebaseService.getCustomers();
-        await _localStorage.saveCustomers(_customers);
-      } else {
-        _customers = _localStorage.getCustomers();
-      }
-    } catch (e) {
-      _customers = _localStorage.getCustomers();
-      _errorMessage = 'Using offline data';
-    }
-
-    _isLoading = false;
     notifyListeners();
   }
 
@@ -357,7 +209,6 @@ class CustomerProvider extends ChangeNotifier {
   void dispose() {
     _customersSubscription?.cancel();
     _selectedCustomerSubscription?.cancel();
-    _connectivitySubscription?.cancel();
     super.dispose();
   }
 }

@@ -1,16 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/transaction.dart';
 import '../models/customer.dart';
 import '../services/firebase_service.dart';
 import '../services/sms_service.dart';
-import '../services/local_storage_service.dart';
 
 class TransactionProvider extends ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   final SmsService _smsService = SmsService();
-  final LocalStorageService _localStorage = LocalStorageService();
 
   List<CustomerTransaction> _transactions = [];
   List<CustomerTransaction> _allTransactions = [];
@@ -18,8 +15,6 @@ class TransactionProvider extends ChangeNotifier {
   String? _errorMessage;
   StreamSubscription? _transactionsSubscription;
   StreamSubscription? _allTransactionsSubscription;
-  StreamSubscription? _connectivitySubscription;
-  bool _isOnline = true;
   String? _currentCustomerId;
 
   // Getters
@@ -29,23 +24,9 @@ class TransactionProvider extends ChangeNotifier {
       _allTransactions.take(10).toList();
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  bool get isOnline => _isOnline;
 
-  // Initialize with local storage first
+  // Initialize
   Future<void> init() async {
-    await _localStorage.init();
-
-    // Monitor connectivity
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      result,
-    ) {
-      _isOnline = result.first != ConnectivityResult.none;
-      if (_isOnline) {
-        _syncPendingTransactions();
-      }
-      notifyListeners();
-    });
-
     _startListeningToAll();
   }
 
@@ -64,67 +45,18 @@ class TransactionProvider extends ChangeNotifier {
         );
   }
 
-  // Background sync pending transactions
-  Future<void> _syncPendingTransactions() async {
-    final pending = _localStorage.getPendingSyncItems();
-
-    for (final item in pending) {
-      try {
-        if (item['type'] == 'transaction') {
-          final id = item['id'] as String;
-          final action = item['action'] as String;
-
-          if (action == 'add') {
-            // Find the transaction in local storage
-            if (_currentCustomerId != null) {
-              final localTransactions = _localStorage.getTransactions(
-                _currentCustomerId!,
-              );
-              final transaction = localTransactions.firstWhere(
-                (t) => t.id == id,
-                orElse: () => CustomerTransaction(
-                  id: '',
-                  customerId: '',
-                  type: TransactionType.credit,
-                  amount: 0,
-                  date: DateTime.now(),
-                  createdAt: DateTime.now(),
-                ),
-              );
-              if (transaction.id.isNotEmpty) {
-                await _firebaseService.addTransaction(transaction);
-              }
-            }
-          } else if (action == 'delete') {
-            // Already deleted from Firebase or will be handled
-          }
-
-          await _localStorage.removePendingSyncItem(id);
-        }
-      } catch (e) {
-        debugPrint('Transaction sync error: $e');
-      }
-    }
-  }
-
   // Start listening to transactions for a specific customer
   void listenToCustomerTransactions(String customerId) {
     _currentCustomerId = customerId;
-
-    // Load from local storage first (instant)
-    _transactions = _localStorage.getTransactions(customerId);
+    _isLoading = true;
     notifyListeners();
 
-    // Then listen to Firebase
     _transactionsSubscription?.cancel();
     _transactionsSubscription = _firebaseService
         .getTransactionsStream(customerId)
         .listen(
           (transactions) {
-            if (transactions.isNotEmpty) {
-              _transactions = transactions;
-              _localStorage.saveTransactions(customerId, transactions);
-            }
+            _transactions = transactions;
             _isLoading = false;
             notifyListeners();
           },
@@ -144,7 +76,7 @@ class TransactionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add a new transaction - LOCAL FIRST (instant)
+  // Add a new transaction - FIREBASE DIRECT
   Future<bool> addTransaction({
     required CustomerTransaction transaction,
     required Customer customer,
@@ -152,93 +84,57 @@ class TransactionProvider extends ChangeNotifier {
     required String businessName,
   }) async {
     try {
-      // Save locally first - INSTANT response
-      final localId = await _localStorage.addTransactionLocally(transaction);
-
-      // Add to in-memory list immediately
-      final newTransaction = CustomerTransaction(
-        id: localId,
-        customerId: transaction.customerId,
-        type: transaction.type,
-        amount: transaction.amount,
-        description: transaction.description,
-        date: transaction.date,
-        createdAt: DateTime.now(),
-      );
-      _transactions.insert(0, newTransaction);
+      _isLoading = true;
       notifyListeners();
 
-      // Send SMS in background (non-blocking, fully automatic)
+      // Save to Firebase
+      await _firebaseService.addTransaction(transaction);
+
+      _isLoading = false;
+      notifyListeners();
+
+      // Send SMS in background (non-blocking)
       if (sendSms && customer.phone.isNotEmpty) {
         _sendSmsInBackground(customer, transaction, businessName);
       }
 
-      // Sync to Firebase in background (non-blocking)
-      if (_isOnline) {
-        _firebaseService
-            .addTransaction(transaction)
-            .then((_) {
-              _localStorage.removePendingSyncItem(localId);
-            })
-            .catchError((e) {
-              debugPrint('Background transaction sync failed: $e');
-            });
-      }
-
       return true;
     } catch (e) {
-      _errorMessage = 'Error adding transaction';
+      _errorMessage = 'Error adding transaction: $e';
+      _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  // Send SMS completely in background (no user interaction)
+  // Send SMS in background
   void _sendSmsInBackground(
     Customer customer,
     CustomerTransaction transaction,
     String businessName,
   ) {
-    // Fire and forget - don't wait for it
     Future(() async {
       try {
-        await _smsService.sendTransactionSms(
+        final success = await _smsService.sendTransactionSms(
           customer: customer,
           transaction: transaction,
           businessName: businessName,
         );
-        debugPrint('SMS sent successfully to ${customer.phone}');
+        if (success) {
+          debugPrint('SMS sent successfully to ${customer.phone}');
+        } else {
+          debugPrint('SMS sending failed for ${customer.phone}');
+        }
       } catch (e) {
-        debugPrint('Background SMS failed: $e');
+        debugPrint('SMS error: $e');
       }
     });
   }
 
-  // Delete a transaction - LOCAL FIRST
+  // Delete a transaction - FIREBASE DIRECT
   Future<bool> deleteTransaction(CustomerTransaction transaction) async {
     try {
-      // Delete locally first
-      await _localStorage.deleteTransactionLocally(transaction);
-
-      // Update in-memory
-      _transactions.removeWhere((t) => t.id == transaction.id);
-      notifyListeners();
-
-      // Sync to Firebase in background and clean up pending sync
-      if (_isOnline) {
-        _firebaseService
-            .deleteTransaction(transaction)
-            .then((_) {
-              // Successfully deleted from Firebase - remove from pending sync
-              _localStorage.removePendingSyncItem(transaction.id);
-              debugPrint('Transaction ${transaction.id} deleted from Firebase');
-            })
-            .catchError((e) {
-              debugPrint('Background delete failed: $e');
-              // Keep in pending sync queue for retry
-            });
-      }
-
+      await _firebaseService.deleteTransaction(transaction);
       return true;
     } catch (e) {
       _errorMessage = 'Error deleting transaction';
@@ -247,21 +143,16 @@ class TransactionProvider extends ChangeNotifier {
     }
   }
 
-  // Get transactions summary for a date range
-  Map<String, double> getTransactionsSummary({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) {
-    final filteredTransactions = _allTransactions.where((t) {
-      if (startDate != null && t.date.isBefore(startDate)) return false;
-      if (endDate != null && t.date.isAfter(endDate)) return false;
-      return true;
-    });
+  // Get transactions summary for a customer
+  Map<String, double> getCustomerSummary(String customerId) {
+    final customerTxns = _transactions
+        .where((t) => t.customerId == customerId)
+        .toList();
 
     double totalCredit = 0;
     double totalDebit = 0;
 
-    for (final t in filteredTransactions) {
+    for (var t in customerTxns) {
       if (t.type == TransactionType.credit) {
         totalCredit += t.amount;
       } else {
@@ -270,10 +161,20 @@ class TransactionProvider extends ChangeNotifier {
     }
 
     return {
-      'credit': totalCredit,
-      'debit': totalDebit,
-      'net': totalCredit - totalDebit,
+      'totalCredit': totalCredit,
+      'totalDebit': totalDebit,
+      'balance': totalCredit - totalDebit,
     };
+  }
+
+  // Get transactions by date range
+  List<CustomerTransaction> getTransactionsByDateRange(
+    DateTime start,
+    DateTime end,
+  ) {
+    return _allTransactions
+        .where((t) => t.date.isAfter(start) && t.date.isBefore(end))
+        .toList();
   }
 
   // Clear error
@@ -286,7 +187,6 @@ class TransactionProvider extends ChangeNotifier {
   void dispose() {
     _transactionsSubscription?.cancel();
     _allTransactionsSubscription?.cancel();
-    _connectivitySubscription?.cancel();
     super.dispose();
   }
 }

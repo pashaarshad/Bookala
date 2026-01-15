@@ -18,11 +18,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
   Future<void> _signInWithGoogle() async {
     setState(() {
       _isLoading = true;
@@ -31,15 +26,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      setState(() => _statusMessage = 'Authenticating...');
       final success = await authProvider.signInWithGoogle();
+
+      debugPrint('Sign-in result: $success, status: ${authProvider.status}');
+
       if (success && mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.home);
+        setState(() => _statusMessage = 'Success! Loading dashboard...');
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, AppRoutes.home);
+        }
       } else if (mounted) {
-        setState(
-          () => _statusMessage = 'Google Sign-In failed. Try Demo Mode.',
-        );
+        final error =
+            authProvider.errorMessage ?? 'Sign in failed. Please try again.';
+        setState(() => _statusMessage = error);
       }
     } catch (e) {
+      debugPrint('Login screen error: $e');
       if (mounted) {
         setState(() => _statusMessage = 'Error: ${e.toString()}');
       }
@@ -47,24 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  Future<void> _handleDemoLogin() async {
-    // Direct single-click demo login
-    setState(() => _statusMessage = 'Logging in as Demo User...');
-    await _signInAsDemo();
-  }
-
-  Future<void> _signInAsDemo() async {
-    setState(() => _isLoading = true);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.signInAsDemo();
-    if (success && mounted) {
-      Navigator.pushReplacementNamed(context, AppRoutes.home);
-    }
-    if (mounted) {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -122,22 +109,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(
                         _statusMessage,
                         style: GoogleFonts.inter(
-                          color: AppTheme.primaryColor,
+                          color:
+                              _statusMessage.contains('Error') ||
+                                  _statusMessage.contains('failed')
+                              ? AppTheme.debitColor
+                              : AppTheme.primaryColor,
                           fontWeight: FontWeight.w500,
                         ),
-                      ).animate().fadeIn().shimmer(),
+                        textAlign: TextAlign.center,
+                      ).animate().fadeIn(),
                     ),
 
                   _buildSignInButton()
                       .animate()
                       .fadeIn(delay: 800.ms, duration: 600.ms)
                       .slideY(begin: 0.5, end: 0),
-                  const SizedBox(height: 16),
-                  _buildDemoButton()
-                      .animate()
-                      .fadeIn(delay: 900.ms, duration: 600.ms)
-                      .slideY(begin: 0.5, end: 0),
                   const SizedBox(height: 24),
+                  Text(
+                    'Sign in with your Google account to securely\nstore your data in the cloud.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppTheme.textMuted,
+                    ),
+                    textAlign: TextAlign.center,
+                  ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
+                  const SizedBox(height: 16),
                   Text(
                     'By signing in, you agree to our Terms of Service',
                     style: GoogleFonts.inter(
@@ -145,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: AppTheme.textMuted,
                     ),
                     textAlign: TextAlign.center,
-                  ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
+                  ).animate().fadeIn(delay: 1100.ms, duration: 600.ms),
                 ],
               ),
             ),
@@ -220,21 +216,6 @@ class _LoginScreenState extends State<LoginScreen> {
         icon: Icons.g_mobiledata_rounded,
         isLoading: _isLoading,
         onPressed: _signInWithGoogle,
-      ),
-    );
-  }
-
-  Widget _buildDemoButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _isLoading ? null : _handleDemoLogin,
-        icon: const Icon(Icons.login),
-        label: const Text('Demo Login (Offline Mode)'),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          side: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.5)),
-        ),
       ),
     );
   }

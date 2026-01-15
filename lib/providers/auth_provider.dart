@@ -16,7 +16,6 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   UserProfile? _userProfile;
   String? _errorMessage;
-  bool _isDemo = false;
 
   // Getters
   AuthStatus get status => _status;
@@ -25,15 +24,13 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   bool get isLoading => _status == AuthStatus.loading;
-  bool get isDemo => _isDemo;
 
   AuthProvider() {
     _firebaseService = FirebaseService();
     try {
-      // Safely initialize Firebase instances if available
       if (Firebase.apps.isNotEmpty) {
         _auth = FirebaseAuth.instance;
-        // Use the Web Client ID from google-services.json (client_type: 3)
+        // Web Client ID from google-services.json
         _googleSignIn = GoogleSignIn(
           serverClientId:
               '583387496324-11askmipvnrob3hg5n4d4komre5k8b6g.apps.googleusercontent.com',
@@ -49,14 +46,11 @@ class AuthProvider extends ChangeNotifier {
   void _init() {
     if (_auth != null) {
       _auth!.authStateChanges().listen((User? user) async {
-        if (_isDemo) return; // Don't override demo state
-
         if (user != null) {
           _user = user;
           await _loadUserProfile();
           _status = AuthStatus.authenticated;
-        } else if (!_isDemo) {
-          // Only set unauthenticated if not in demo mode
+        } else {
           _user = null;
           _userProfile = null;
           _status = AuthStatus.unauthenticated;
@@ -64,50 +58,14 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       });
     } else {
-      // No Firebase, default to unauthenticated
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
-    }
-  }
-
-  // Mock Login for Demo
-  Future<bool> signInAsDemo() async {
-    try {
-      _status = AuthStatus.loading;
-      _errorMessage = null;
-      notifyListeners();
-
-      // Simulate network delay
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      _isDemo = true;
-      _firebaseService.setMockMode(true);
-
-      _userProfile = UserProfile(
-        id: 'demo_user_123',
-        name: 'Demo User',
-        email: 'demo@bookala.com',
-        photoUrl: null,
-        createdAt: DateTime.now(),
-        lastLogin: DateTime.now(),
-        businessName: 'My Demo Shop',
-      );
-
-      _status = AuthStatus.authenticated;
-      notifyListeners();
-      return true;
-    } catch (e) {
       _status = AuthStatus.error;
-      _errorMessage = 'Demo login failed';
+      _errorMessage = 'Firebase is not configured. Please check your setup.';
       notifyListeners();
-      return false;
     }
   }
 
-  // Load user profile from Firestore or Mock
+  // Load user profile from Firestore
   Future<void> _loadUserProfile() async {
-    if (_isDemo) return;
-
     try {
       _userProfile = await _firebaseService.getUserProfile();
 
@@ -123,11 +81,10 @@ class AuthProvider extends ChangeNotifier {
         );
         await _firebaseService.saveUserProfile(_userProfile!);
       } else if (_userProfile != null) {
-        // Update last login
         await _firebaseService.updateLastLogin();
       }
     } catch (e) {
-      print('Error loading user profile: $e');
+      debugPrint('Error loading user profile: $e');
     }
   }
 
@@ -135,7 +92,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithGoogle() async {
     if (_auth == null || _googleSignIn == null) {
       _status = AuthStatus.error;
-      _errorMessage = 'Firebase is not configured for this device.';
+      _errorMessage = 'Firebase is not configured. Please reinstall the app.';
       notifyListeners();
       return false;
     }
@@ -145,18 +102,26 @@ class AuthProvider extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
+      debugPrint('Starting Google Sign-In...');
+
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn!.signIn();
 
       if (googleUser == null) {
+        debugPrint('Google Sign-In cancelled by user');
         _status = AuthStatus.unauthenticated;
+        _errorMessage = 'Sign in cancelled';
         notifyListeners();
         return false;
       }
 
+      debugPrint('Got Google user: ${googleUser.email}');
+
       // Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
+
+      debugPrint('Got Google auth tokens');
 
       // Create a new credential
       final credential = GoogleAuthProvider.credential(
@@ -165,19 +130,35 @@ class AuthProvider extends ChangeNotifier {
       );
 
       // Sign in to Firebase with the credential
-      await _auth!.signInWithCredential(credential);
-      _isDemo = false;
-      _firebaseService.setMockMode(false);
+      debugPrint('Signing in to Firebase...');
+      final userCredential = await _auth!.signInWithCredential(credential);
 
-      return true;
+      if (userCredential.user != null) {
+        debugPrint(
+          'Firebase sign-in successful: ${userCredential.user!.email}',
+        );
+        _user = userCredential.user;
+        await _loadUserProfile();
+        _status = AuthStatus.authenticated;
+        notifyListeners();
+        return true;
+      } else {
+        debugPrint('Firebase sign-in failed: no user returned');
+        _status = AuthStatus.error;
+        _errorMessage = 'Authentication failed';
+        notifyListeners();
+        return false;
+      }
     } on FirebaseAuthException catch (e) {
+      debugPrint('FirebaseAuthException: ${e.message}');
       _status = AuthStatus.error;
-      _errorMessage = e.message;
+      _errorMessage = e.message ?? 'Authentication failed';
       notifyListeners();
       return false;
     } catch (e) {
+      debugPrint('Sign-in error: $e');
       _status = AuthStatus.error;
-      _errorMessage = 'An error occurred during sign in';
+      _errorMessage = 'Sign in failed: $e';
       notifyListeners();
       return false;
     }
@@ -189,13 +170,11 @@ class AuthProvider extends ChangeNotifier {
       _status = AuthStatus.loading;
       notifyListeners();
 
-      if (!_isDemo && _auth != null && _googleSignIn != null) {
+      if (_auth != null && _googleSignIn != null) {
         await _googleSignIn!.signOut();
         await _auth!.signOut();
       }
 
-      _isDemo = false;
-      _firebaseService.setMockMode(false);
       _user = null;
       _userProfile = null;
       _status = AuthStatus.unauthenticated;
@@ -214,7 +193,6 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     if (_userProfile == null) return;
 
-    // Update local state
     _userProfile = _userProfile!.copyWith(
       name: name ?? _userProfile!.name,
       businessName: businessName ?? _userProfile!.businessName,
@@ -222,12 +200,10 @@ class AuthProvider extends ChangeNotifier {
     );
     notifyListeners();
 
-    if (_isDemo) return; // Don't save to firebase in demo mode
-
     try {
       await _firebaseService.saveUserProfile(_userProfile!);
     } catch (e) {
-      print('Error updating profile: $e');
+      debugPrint('Error updating profile: $e');
     }
   }
 
