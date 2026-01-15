@@ -1,170 +1,283 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../models/customer.dart';
 import '../models/transaction.dart';
 import '../models/user_profile.dart';
-
-// This is a MOCK service that works without Firebase
-// Will be replaced with real Firebase after proper setup
+import '../config/constants.dart';
 
 class FirebaseService {
-  // Mock Data Store
-  final Map<String, Customer> _mockCustomers = {};
-  final Map<String, CustomerTransaction> _mockTransactions = {};
-  UserProfile? _mockUserProfile;
+  FirebaseFirestore? _firestore;
+  FirebaseAuth? _auth;
 
   FirebaseService() {
-    debugPrint('FirebaseService: Running in MOCK mode');
-    _initDemoData();
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        _firestore = FirebaseFirestore.instance;
+        _auth = FirebaseAuth.instance;
+        debugPrint('✅ FirebaseService initialized');
+      }
+    } catch (e) {
+      debugPrint('❌ FirebaseService init error: $e');
+    }
   }
 
-  void _initDemoData() {
-    // Add demo customer
-    final demoCustomer = Customer(
-      id: 'demo_cust_1',
-      name: 'Rahul Sharma',
-      phone: '+919876543210',
-      shopName: 'Sharma General Store',
-      totalCredit: 5000,
-      totalDebit: 2000,
-      latitude: 28.6139,
-      longitude: 77.2090,
-      radius: 100,
-      createdAt: DateTime.now(),
-    );
-    _mockCustomers[demoCustomer.id] = demoCustomer;
-  }
-
-  // Get current user ID
-  String? get currentUserId => 'demo_user_123';
-  bool get isAvailable => true;
+  String? get currentUserId => _auth?.currentUser?.uid;
+  bool get isAvailable =>
+      _firestore != null && _auth != null && currentUserId != null;
 
   // ==================== USER PROFILE ====================
 
   Future<UserProfile?> getUserProfile() async {
-    return _mockUserProfile;
+    if (!isAvailable) return null;
+
+    try {
+      final doc = await _firestore!
+          .collection(AppConstants.usersCollection)
+          .doc(currentUserId)
+          .get();
+
+      if (doc.exists) {
+        return UserProfile.fromFirestore(doc);
+      }
+    } catch (e) {
+      debugPrint('Error getting user profile: $e');
+    }
+    return null;
   }
 
   Future<void> saveUserProfile(UserProfile profile) async {
-    _mockUserProfile = profile;
+    if (!isAvailable) return;
+
+    await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .set(profile.toFirestore(), SetOptions(merge: true));
   }
 
   Future<void> updateLastLogin() async {
-    // Mock update
+    if (!isAvailable) return;
+
+    await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .update({'lastLogin': Timestamp.now()});
   }
 
   // ==================== CUSTOMERS ====================
 
   Stream<List<Customer>> getCustomersStream() {
-    return Stream.value(_mockCustomers.values.toList());
+    if (!isAvailable) return Stream.value([]);
+
+    return _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .orderBy('name')
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) => Customer.fromFirestore(doc)).toList(),
+        );
   }
 
   Future<List<Customer>> getCustomers() async {
-    return _mockCustomers.values.toList();
+    if (!isAvailable) return [];
+
+    final snapshot = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .orderBy('name')
+        .get();
+
+    return snapshot.docs.map((doc) => Customer.fromFirestore(doc)).toList();
   }
 
   Future<Customer?> getCustomer(String customerId) async {
-    return _mockCustomers[customerId];
+    if (!isAvailable) return null;
+
+    final doc = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(customerId)
+        .get();
+
+    if (doc.exists) {
+      return Customer.fromFirestore(doc);
+    }
+    return null;
   }
 
   Stream<Customer?> getCustomerStream(String customerId) {
-    return Stream.value(_mockCustomers[customerId]);
+    if (!isAvailable) return Stream.value(null);
+
+    return _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(customerId)
+        .snapshots()
+        .map((doc) => doc.exists ? Customer.fromFirestore(doc) : null);
   }
 
   Future<String> addCustomer(Customer customer) async {
-    final id = 'cust_${DateTime.now().millisecondsSinceEpoch}';
-    final newCustomer = Customer(
-      id: id,
-      name: customer.name,
-      phone: customer.phone,
-      shopName: customer.shopName,
-      totalCredit: customer.totalCredit,
-      totalDebit: customer.totalDebit,
-      latitude: customer.latitude,
-      longitude: customer.longitude,
-      radius: customer.radius,
-      createdAt: DateTime.now(),
-    );
-    _mockCustomers[id] = newCustomer;
-    return id;
+    if (!isAvailable) throw Exception('Not logged in');
+
+    final docRef = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .add(customer.toFirestore());
+
+    return docRef.id;
   }
 
   Future<void> updateCustomer(Customer customer) async {
-    _mockCustomers[customer.id] = customer;
+    if (!isAvailable) return;
+
+    await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(customer.id)
+        .update(customer.toFirestore());
   }
 
   Future<void> deleteCustomer(String customerId) async {
-    _mockCustomers.remove(customerId);
-    _mockTransactions.removeWhere((_, t) => t.customerId == customerId);
+    if (!isAvailable) return;
+
+    // Delete all transactions for this customer first
+    final transactions = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .where('customerId', isEqualTo: customerId)
+        .get();
+
+    for (var doc in transactions.docs) {
+      await doc.reference.delete();
+    }
+
+    await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(customerId)
+        .delete();
   }
 
   // ==================== TRANSACTIONS ====================
 
   Stream<List<CustomerTransaction>> getTransactionsStream(String customerId) {
-    final transactions = _mockTransactions.values
-        .where((t) => t.customerId == customerId)
-        .toList();
-    transactions.sort((a, b) => b.date.compareTo(a.date));
-    return Stream.value(transactions);
+    if (!isAvailable) return Stream.value([]);
+
+    return _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .where('customerId', isEqualTo: customerId)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => CustomerTransaction.fromFirestore(doc))
+              .toList(),
+        );
   }
 
   Stream<List<CustomerTransaction>> getAllTransactionsStream() {
-    final transactions = _mockTransactions.values.toList();
-    transactions.sort((a, b) => b.date.compareTo(a.date));
-    return Stream.value(transactions);
+    if (!isAvailable) return Stream.value([]);
+
+    return _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .orderBy('date', descending: true)
+        .limit(50)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => CustomerTransaction.fromFirestore(doc))
+              .toList(),
+        );
   }
 
   Future<String> addTransaction(CustomerTransaction transaction) async {
-    final id = 'txn_${DateTime.now().millisecondsSinceEpoch}';
-    final newTxn = CustomerTransaction(
-      id: id,
-      customerId: transaction.customerId,
-      amount: transaction.amount,
-      type: transaction.type,
-      description: transaction.description,
-      date: transaction.date,
-      createdAt: DateTime.now(),
-    );
-    _mockTransactions[id] = newTxn;
+    if (!isAvailable) throw Exception('Not logged in');
+
+    final docRef = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .add(transaction.toFirestore());
 
     // Update customer totals
-    if (_mockCustomers.containsKey(transaction.customerId)) {
-      final customer = _mockCustomers[transaction.customerId]!;
-      if (transaction.type == TransactionType.credit) {
-        _mockCustomers[transaction.customerId] = customer.copyWith(
-          totalCredit: customer.totalCredit + transaction.amount,
-        );
-      } else {
-        _mockCustomers[transaction.customerId] = customer.copyWith(
-          totalDebit: customer.totalDebit + transaction.amount,
-        );
-      }
+    final customerRef = _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(transaction.customerId);
+
+    if (transaction.type == TransactionType.credit) {
+      await customerRef.update({
+        'totalCredit': FieldValue.increment(transaction.amount),
+        'updatedAt': Timestamp.now(),
+      });
+    } else {
+      await customerRef.update({
+        'totalDebit': FieldValue.increment(transaction.amount),
+        'updatedAt': Timestamp.now(),
+      });
     }
-    return id;
+
+    return docRef.id;
   }
 
   Future<void> deleteTransaction(CustomerTransaction transaction) async {
-    _mockTransactions.remove(transaction.id);
+    if (!isAvailable) return;
 
-    // Update customer totals
-    if (_mockCustomers.containsKey(transaction.customerId)) {
-      final customer = _mockCustomers[transaction.customerId]!;
-      if (transaction.type == TransactionType.credit) {
-        _mockCustomers[transaction.customerId] = customer.copyWith(
-          totalCredit: customer.totalCredit - transaction.amount,
-        );
-      } else {
-        _mockCustomers[transaction.customerId] = customer.copyWith(
-          totalDebit: customer.totalDebit - transaction.amount,
-        );
-      }
+    await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .doc(transaction.id)
+        .delete();
+
+    final customerRef = _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.customersCollection)
+        .doc(transaction.customerId);
+
+    if (transaction.type == TransactionType.credit) {
+      await customerRef.update({
+        'totalCredit': FieldValue.increment(-transaction.amount),
+        'updatedAt': Timestamp.now(),
+      });
+    } else {
+      await customerRef.update({
+        'totalDebit': FieldValue.increment(-transaction.amount),
+        'updatedAt': Timestamp.now(),
+      });
     }
   }
 
   Future<List<CustomerTransaction>> getTransactions(String customerId) async {
-    final transactions = _mockTransactions.values
-        .where((t) => t.customerId == customerId)
+    if (!isAvailable) return [];
+
+    final snapshot = await _firestore!
+        .collection(AppConstants.usersCollection)
+        .doc(currentUserId)
+        .collection(AppConstants.transactionsCollection)
+        .where('customerId', isEqualTo: customerId)
+        .orderBy('date', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => CustomerTransaction.fromFirestore(doc))
         .toList();
-    transactions.sort((a, b) => b.date.compareTo(a.date));
-    return transactions;
   }
 }

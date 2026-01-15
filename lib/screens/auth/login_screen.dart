@@ -17,26 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String _statusMessage = '';
 
-  Future<void> _signInAsDemo() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Logging in as Demo User...';
-    });
-
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signInAsDemo();
-      // AppWrapper will handle navigation
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _statusMessage = 'Error: ${e.toString()}';
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
   Future<void> _signInWithGoogle() async {
     setState(() {
       _isLoading = true;
@@ -54,6 +34,25 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _signInAsDemo() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Logging in as Demo User...';
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.signInAsDemo();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -120,8 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: GoogleFonts.inter(
                           color:
                               _statusMessage.contains('Error') ||
-                                  _statusMessage.contains('failed') ||
-                                  _statusMessage.contains('not configured')
+                                  _statusMessage.contains('failed')
                               ? AppTheme.debitColor
                               : AppTheme.primaryColor,
                           fontWeight: FontWeight.w500,
@@ -130,33 +128,25 @@ class _LoginScreenState extends State<LoginScreen> {
                       ).animate().fadeIn(),
                     ),
 
-                  // Demo Login Button (Primary for now)
-                  _buildDemoButton()
+                  // Google Sign In Button
+                  _buildGoogleButton()
                       .animate()
                       .fadeIn(delay: 800.ms, duration: 600.ms)
                       .slideY(begin: 0.5, end: 0),
                   const SizedBox(height: 16),
-                  // Google Button (Disabled until Firebase is set up)
-                  _buildSignInButton()
+                  // Demo Login Button
+                  _buildDemoButton()
                       .animate()
                       .fadeIn(delay: 900.ms, duration: 600.ms)
                       .slideY(begin: 0.5, end: 0),
                   const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  Text(
+                    'Sign in with Google to sync your data across devices',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppTheme.textMuted,
                     ),
-                    child: Text(
-                      '⚠️ Firebase Setup Required\nGoogle Sign-In will work after setup',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.orange,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                    textAlign: TextAlign.center,
                   ).animate().fadeIn(delay: 1000.ms, duration: 600.ms),
                 ],
               ),
@@ -224,25 +214,25 @@ class _LoginScreenState extends State<LoginScreen> {
     }).toList();
   }
 
-  Widget _buildDemoButton() {
+  Widget _buildGoogleButton() {
     return SizedBox(
       width: double.infinity,
       child: GradientButton(
-        text: '🚀 Demo Login (Test App)',
-        icon: Icons.play_arrow,
+        text: 'Continue with Google',
+        icon: Icons.g_mobiledata_rounded,
         isLoading: _isLoading,
-        onPressed: _signInAsDemo,
+        onPressed: _signInWithGoogle,
       ),
     );
   }
 
-  Widget _buildSignInButton() {
+  Widget _buildDemoButton() {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: _isLoading ? null : _signInWithGoogle,
-        icon: const Icon(Icons.g_mobiledata_rounded),
-        label: const Text('Continue with Google'),
+        onPressed: _isLoading ? null : _signInAsDemo,
+        icon: const Icon(Icons.play_arrow),
+        label: const Text('Demo Mode (Offline)'),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
